@@ -1,3 +1,5 @@
+import 'react-native-get-random-values';
+
 /**
  * Context Notes App
  * iPad-first note-taking app for handwritten math/derivations

@@ -363,101 +363,89 @@ bad option: --windowKey=...
 
 ## Next Steps
 
-### Task 5: PageEditorScreen with Drawing Canvas (Planning Only)
+### Task 6: Pages inside a Note (Planning Only)
 
 **Goal:**
-Implement basic drawing canvas in PageEditorScreen for handwritten notes.
+Implement page model with local persistence and basic page navigation.
+This task prepares the foundation for drawing but does NOT include drawing yet.
 
 **Requirements:**
-- Display drawing canvas for the current page
-- Support basic touch drawing (pen/stylus)
-- Save drawing data to the current page
-- Multiple pages per note (navigation between pages)
-- Persist drawing data across app restarts
+- Pages belong to a note (noteId, folderId)
+- Each page has a pageIndex (0-based)
+- A note can have multiple pages
+- PageEditorScreen becomes a real page viewer shell:
+  - Displays current pageIndex
+  - Buttons: Previous Page / Next Page
+  - Button: Create New Page
+- Pages persist across app restarts
+- Navigating from NoteList opens PageEditor at pageIndex = 0
+- Navigation params remain: (folderId, noteId, pageIndex)
 
 **Constraints:**
 - Continue using AsyncStorage (no SQLite yet)
-- Pages belong to notes (noteId from route params)
-- Keep dependencies minimal (prefer lightweight canvas libraries)
-- No AI features yet (text recognition, OCR)
-- No advanced drawing tools yet (colors, brush sizes - can add later)
-- No image import yet
+- Keep dependencies minimal (no new libs unless absolutely necessary)
+- No drawing yet (page content can be empty placeholder)
+- No AI, no Supabase
+- No schema migrations required yet
 
-**Data Model Considerations:**
+**Data Model:**
 ```typescript
 interface Page {
   id: string;           // UUID v4
   noteId: string;       // Parent note
   pageIndex: number;    // Order within note (0-based)
-  drawingData: string;  // Canvas drawing data (format TBD)
   createdAt: number;    // Unix timestamp
   updatedAt: number;    // Unix timestamp
 }
 ```
 
-**Technical Decisions Needed:**
-1. **Canvas Library:**
-   - React Native Canvas?
-   - react-native-skia?
-   - react-native-svg with touch handlers?
-   - Other lightweight option?
-
-2. **Drawing Data Format:**
-   - SVG paths?
-   - Base64 PNG?
-   - Array of stroke coordinates?
-   - Consider storage size vs rendering performance
-
-3. **Storage Strategy:**
-   - Pages stored per note: `@pages_<noteId>`?
-   - Or single `@pages` key with noteId filtering?
-   - How to handle large drawing data?
-
-4. **Multi-page Navigation:**
-   - Swipe gestures between pages?
-   - Page counter/indicator UI?
-   - Add/delete page controls?
-
-**Prompt for Task 5 Planning:**
+**Prompt for Task 6 Planning:**
 
 ```
-Proceed to Task 5, planning only.
+Proceed to Task 6, planning only.
 
-Task 5 goal:
-Implement PageEditorScreen with basic drawing canvas functionality.
+Task 6 goal:
+Implement Pages inside a Note, with local persistence and basic page navigation.
+This task prepares the foundation for drawing but does NOT include drawing yet.
 
 Requirements:
-- Display drawing canvas for current page (using folderId, noteId, pageIndex from route params)
-- Support touch/stylus drawing (basic pen tool)
-- Save drawing data to current page
-- Support multiple pages per note (page navigation: prev/next, add page)
-- Persist drawing data across app restarts
-- Display page counter (e.g., "Page 1 of 3")
+- Pages belong to a note (noteId, folderId)
+- Each page has a pageIndex (0-based)
+- A note can have multiple pages
+- PageEditorScreen becomes a real page viewer shell:
+  - Displays current pageIndex
+  - Buttons: Previous Page / Next Page
+  - Button: Create New Page
+- Pages persist across app restarts
+- Navigating from NoteList opens PageEditor at pageIndex = 0
+- Navigation params remain: (folderId, noteId, pageIndex)
 
 Constraints:
 - Continue using AsyncStorage (no SQLite yet)
-- Pages scoped by noteId
-- Keep dependencies minimal (prefer lightweight canvas libraries)
-- No AI, no OCR, no text recognition yet
-- No advanced tools yet (colors, brushes, eraser can come later)
-- No image import yet
-- iPad-optimized (large canvas, touch-friendly controls)
+- Keep dependencies minimal (no new libs unless absolutely necessary)
+- No drawing yet (page content can be empty placeholder)
+- No AI, no Supabase
+- No schema migrations required yet
 
 For the plan include:
-1) Canvas library recommendation with rationale (compare 2-3 options)
-2) Page data model (id, noteId, pageIndex, drawingData format)
-3) Storage strategy for drawing data (format, size considerations)
-4) Multi-page navigation approach (UI/UX)
-5) Files to create/modify
-6) Definition of done + manual test checklist
+1) Page data model (id, noteId, pageIndex, timestamps, placeholder content)
+2) Storage strategy:
+   - AsyncStorage keying
+   - How pages are loaded by noteId
+   - How pageIndex ordering is maintained
+3) Files to create/modify
+4) Definition of done
+5) Manual test checklist
 
-Do not modify files until I approve.
+Important:
+- Do not modify files until I explicitly approve
+- Keep changes incremental and isolated to pages + PageEditorScreen
 
-After Task 5 is implemented and verified, update PROJECT_STATE.md with:
-- Task 5 completion summary
+After Task 6 is implemented and verified, update PROJECT_STATE.md with:
+- Task 6 completion summary
 - any new dependencies
 - any issues/workarounds
-- the exact planning-only prompt for Task 6
+- the exact planning-only prompt for Task 7
 
 Stop after updating PROJECT_STATE.md.
 ```

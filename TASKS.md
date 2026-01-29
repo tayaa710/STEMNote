@@ -12,7 +12,7 @@ Definition of Done (DoD) for any task:
 - No TypeScript errors.
 - Basic happy-path works.
 
-## Task 1 — Project bootstrap (RN + TypeScript + iPad simulator)
+## Task 1 — Project bootstrap (RN + TypeScript + iPad simulator) ✅ DONE
 Goal:
 - Create a React Native TypeScript app and run it on iOS simulator.
 
@@ -23,7 +23,7 @@ Constraints:
 DoD:
 - `npm run ios` launches app in iPad simulator successfully.
 
-## Task 2 — Repo structure + basic navigation
+## Task 2 — Repo structure + basic navigation ✅ DONE
 Goal:
 - Add folder structure under app/src (screens/components/storage/etc.)
 - Add basic navigation between screens with placeholders.
@@ -35,44 +35,59 @@ Allowed:
 DoD:
 - Can navigate: FolderList -> NoteList -> PageEditor.
 
-## Task 3 — Local SQLite storage layer
+## Task 3 — Local storage with AsyncStorage ✅ DONE
 Goal:
-- Add SQLite database initialization and repos (folders/notes/pages).
-- Provide CRUD for folders and notes.
+- Add AsyncStorage for local persistence.
+- Implement storage layer for folders.
 
 Constraints:
 - No cloud, no Supabase.
-- Keep schema minimal.
+- Start with AsyncStorage (defer SQLite for later).
 
 DoD:
 - Create folder, restart app, folder still exists.
 
-## Task 4 — FolderListScreen (real UI + persistence)
+## Task 4 — FolderListScreen with Persistence ✅ DONE
 Goal:
-- Implement list/create/rename/delete folders with persistence.
+- Implement folder CRUD (create/delete) with AsyncStorage persistence.
+- Full UI with FlatList, input, delete confirmations.
 
 DoD:
 - Folder CRUD works reliably.
+- Folders persist across app restarts.
 
-## Task 5 — NoteListScreen (real UI + persistence)
+## Task 5 — NoteListScreen with Persistence ✅ DONE
 Goal:
 - Notes inside a folder; CRUD notes.
+- Implement note CRUD (create/delete) with AsyncStorage persistence.
+- Notes scoped to folders.
 
 DoD:
 - Notes persist and are scoped to folderId.
+- Navigate to PageEditor with (folderId, noteId, pageIndex).
 
-## Task 6 — Page model + Page list
+## Task 6 — Pages inside a Note (no drawing) 🚧 NEXT
 Goal:
-- Each note has pages (pageIndex).
-- Create/open pages.
+- Implement page model with local persistence (AsyncStorage).
+- PageEditorScreen displays current page and supports navigation.
+- Each note can have multiple pages (pageIndex: 0, 1, 2...).
+- Page navigation: Previous/Next/Create New Page.
+- NO drawing yet (placeholder page content).
+
+Constraints:
+- Continue using AsyncStorage (no SQLite yet).
+- No canvas/drawing implementation.
+- No AI, no Supabase.
 
 DoD:
 - Create page 1, page 2, reopen later.
+- Pages persist and are scoped to noteId.
+- Page navigation works (prev/next/add).
 
 ## Task 7 — DrawingCanvas MVP (Skia)
 Goal:
 - Implement basic drawing: pen, eraser, undo/redo, clear.
-- Save/load drawing data to SQLite.
+- Save/load drawing data to AsyncStorage (or migrate to SQLite if needed).
 
 Constraints:
 - No AI, no export yet.

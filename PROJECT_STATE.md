@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
 **Last Updated:** 2026-01-29
-**Current Task:** Task 7 Complete
-**Status:** ✅ Drawing canvas MVP implemented with per-page persistence
+**Current Task:** Task 8 Complete
+**Status:** ✅ PNG export implemented (full-page render, persisted to Documents/exports)
 
 ---
 
@@ -370,6 +370,35 @@ src/
 
 ---
 
+### Task 8: Export Full Page to PNG ✅
+**Goal:** Render/export the full page drawing to a PNG at a stable resolution.
+
+**Key Decisions:**
+- **Rendering:** Reused `src/utils/exportDrawing.ts` to render strokes to an offscreen Skia surface.
+- **Sizing:** Logical canvas size captured via `onLayout` and mapped to fixed export sizes.
+- **Storage:** Saved PNGs to `DocumentDirectoryPath/exports` via `react-native-fs`.
+- **UX:** Added `Export PNG` button with disabled/loading states and success/error alerts.
+
+**Implementation Details:**
+- `PageEditorScreen` tracks canvas size via `onLayout` and stores it in a ref/state.
+- Export uses `canvasRef.getDrawingData()` (latest in-memory strokes) and flushes pending save.
+- Output size uses `getExportSizeForLogicalSize` for stable portrait/landscape dimensions.
+- File naming: `note_${noteId}_page_${pageIndex+1}_${timestamp}.png`
+
+**Files Modified:**
+- [src/screens/PageEditorScreen.tsx](src/screens/PageEditorScreen.tsx)
+
+**Dependencies Added:**
+- None (used existing `react-native-fs`)
+
+**Manual Testing:**
+- Not run (iOS simulator unavailable in CLI: CoreSimulatorService connection invalid)
+
+**Result:**
+- Export button saves full-page PNG to Documents/exports with stable size
+
+---
+
 ## Current App Structure
 
 ```
@@ -470,6 +499,7 @@ npm run lint
 - `@shopify/react-native-skia` ^2.4.16
 - `uuid` ^13.0.0
 - `react-native-get-random-values` ^2.0.0
+- `react-native-fs` ^2.20.0
 
 ### Development
 - `typescript` ^5.8.3
@@ -537,51 +567,50 @@ bad option: --windowKey=...
 
 ## Next Steps
 
-### Task 8: Render/Export Full Page to PNG (Planning Only)
+### Task 9: Selection Mode + Region Export (Planning Only)
 
 **Goal:**
-Render the current page to a PNG file at a stable resolution.
+Add selection mode to export a user-selected region to PNG.
 
 **Requirements:**
-- Export current page drawing to PNG (visual match to page)
-- Choose and document export size/scale strategy
-- Save PNG to device storage with deterministic naming
-- Provide a UI action to trigger export
-- Use existing drawing data from `@pageDrawings`
-- Keep page metadata unchanged
+- Selection mode toggle in PageEditorScreen
+- User can lasso or drag a region (simple rectangular selection acceptable)
+- Export only the selected region to PNG
+- Output matches the selected area visually
+- Provide success/error feedback and saved file location
 
 **Constraints:**
-- No selection/region export yet (Task 9)
 - No AI integration yet (Task 10+)
 - Keep dependencies minimal
+- Reuse existing drawing data and export pipeline where possible
 
-**Prompt for Task 8 Planning:**
+**Prompt for Task 9 Planning:**
 
 ```
-Proceed to Task 8, planning only.
+Proceed to Task 9, planning only.
 
-Task 8 goal:
-Render/export the full page to a PNG file at a stable resolution.
+Task 9 goal:
+Add selection mode and export the selected region to PNG.
 
 Requirements:
-- Export current page drawing to PNG and save to device storage
-- Output should visually match the page
-- Decide and document export size/scale strategy
-- Integrate an export trigger in PageEditorScreen UI
-- Use existing drawing data from @pageDrawings
-- Do not modify page metadata
+- Add a selection mode toggle in PageEditorScreen
+- Allow the user to select a region (rectangular selection is OK for MVP)
+- Export only the selected region to a PNG
+- Output should visually match the selected area
+- Save PNG to device storage with deterministic naming
+- Provide user feedback (success/error + file location)
 
 Constraints:
-- No selection/region export yet (Task 9)
-- No AI integration yet (Task 10+)
+- No AI integration yet
 - Keep dependencies minimal; justify any new libraries
+- Reuse existing drawing data and export utilities where possible
 
 For the plan include:
-1) Rendering approach (Skia snapshot/offscreen surface)
-2) File system location and naming
-3) UI/UX integration
-4) Files to create/modify
-5) Performance considerations
+1) Selection interaction/UX (how to draw/adjust selection)
+2) Rendering/cropping approach for region export
+3) File system location and naming
+4) UI changes
+5) Files to create/modify
 6) Definition of done
 7) Manual test checklist
 

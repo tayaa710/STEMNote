@@ -6,10 +6,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   AppState,
+  Alert,
+  LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useHeaderHeight } from '@react-navigation/elements';
+import RNFS from 'react-native-fs';
 import { RootStackParamList } from '../types/navigation';
 import { DrawingData, DrawingTool, Page } from '../types/models';
 import {
@@ -20,6 +23,10 @@ import {
 import { loadDrawingData, saveDrawingData } from '../storage/drawings';
 import DrawingCanvas, { DrawingCanvasHandle } from '../components/DrawingCanvas';
 import DrawingToolbar from '../components/DrawingToolbar';
+import {
+  getExportSizeForLogicalSize,
+  renderDrawingToPngBase64,
+} from '../utils/exportDrawing';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PageEditor'>;
 
@@ -39,6 +46,8 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [loadingDrawing, setLoadingDrawing] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
 
   // Track last processed pageIndex to avoid setParams loops
   const lastProcessedIndex = useRef<number | null>(null);
@@ -49,6 +58,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const currentPageIdRef = useRef<string | null>(null);
   const previousPageIdRef = useRef<string | null>(null);
   const canvasRef = useRef<DrawingCanvasHandle | null>(null);
+  const canvasSizeRef = useRef<{ width: number; height: number } | null>(null);
   const headerHeight = useHeaderHeight();
 
   // Load and initialize pages
@@ -173,6 +183,57 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
     canvasRef.current?.clear();
   }, []);
 
+  const handleCanvasLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    const nextSize = { width, height };
+    const currentSize = canvasSizeRef.current;
+    if (!currentSize || currentSize.width !== width || currentSize.height !== height) {
+      canvasSizeRef.current = nextSize;
+      setCanvasSize(nextSize);
+    }
+  }, []);
+
+  const handleExportPng = useCallback(async () => {
+    if (exporting) {
+      return;
+    }
+    const pageId = currentPageIdRef.current;
+    const logicalSize = canvasSizeRef.current;
+    if (!pageId || !logicalSize) {
+      Alert.alert('Export unavailable', 'Canvas is not ready yet.');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const latestData =
+        canvasRef.current?.getDrawingData() ??
+        drawingDataRef.current ??
+        EMPTY_DRAWING;
+      drawingDataRef.current = latestData;
+      await flushSave(pageId);
+
+      const outputSize = getExportSizeForLogicalSize(logicalSize);
+      const base64 = renderDrawingToPngBase64(latestData, logicalSize, outputSize);
+
+      const exportDir = `${RNFS.DocumentDirectoryPath}/exports`;
+      await RNFS.mkdir(exportDir);
+      const filename = `note_${noteId}_page_${pageIndex + 1}_${Date.now()}.png`;
+      const filePath = `${exportDir}/${filename}`;
+      await RNFS.writeFile(filePath, base64, 'base64');
+
+      Alert.alert('Exported PNG', `Saved to:\n${filePath}`);
+    } catch (error) {
+      console.error('Failed to export PNG:', error);
+      Alert.alert('Export failed', 'Unable to export PNG. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, flushSave, noteId, pageIndex]);
+
   useEffect(() => {
     const previousPageId = previousPageIdRef.current;
     if (previousPageId && previousPageId !== currentPage?.id) {
@@ -291,15 +352,32 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
 
   const isPreviousDisabled = pageIndex === 0;
   const isNextDisabled = pageIndex >= totalPages - 1;
+  const isExportDisabled = exporting || loadingDrawing || !canvasSize || !currentPage?.id;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <View style={[styles.container, { paddingTop: headerHeight }]}>
       {/* Page info section */}
       <View style={styles.pageInfoSection}>
-        <Text style={styles.pageInfoText}>
-          Page {displayPageNumber} of {totalPages}
-        </Text>
+        <View style={styles.pageInfoRow}>
+          <Text style={styles.pageInfoText}>
+            Page {displayPageNumber} of {totalPages}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.exportButton,
+              isExportDisabled && styles.exportButtonDisabled,
+            ]}
+            onPress={handleExportPng}
+            disabled={isExportDisabled}
+          >
+            {exporting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.exportButtonText}>Export PNG</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <DrawingToolbar
@@ -314,7 +392,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
         loading={loadingDrawing}
       />
 
-      <View style={styles.canvasContainer}>
+      <View style={styles.canvasContainer} onLayout={handleCanvasLayout}>
         <DrawingCanvas
           ref={canvasRef}
           pageId={currentPage?.id ?? ''}
@@ -390,12 +468,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  pageInfoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   pageInfoText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+    flex: 1,
+    marginRight: 12,
+  },
+  exportButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exportButtonDisabled: {
+    backgroundColor: '#c7c7cc',
+  },
+  exportButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   canvasContainer: {
     flex: 1,

@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
 **Last Updated:** 2026-01-29
-**Current Task:** Task 3 Complete
-**Status:** ✅ Fully functional with folder persistence
+**Current Task:** Task 4 Complete
+**Status:** ✅ Fully functional with folder and note persistence
 
 ---
 
@@ -142,6 +142,82 @@ src/
 
 ---
 
+### Task 4: NoteListScreen with Persistence ✅
+**Goal:** Implement note CRUD with local persistence scoped to folders
+
+**Key Decisions:**
+- **Storage:** AsyncStorage with single `@notes` key (consistent with folder pattern)
+- **API Design:** Folder-scoped functions to avoid UI double-filtering
+  - `loadNotesByFolder(folderId)` → returns `Note[]` for that folder
+  - `createNote(folderId, title)` → returns `Note[]` for that folder
+  - `deleteNote(folderId, noteId)` → returns `Note[]` for that folder
+- **Internal pattern:** Load all → filter → modify → save all
+- **UUID polyfill:** Relies on existing `react-native-get-random-values` from Task 3
+- **Cascade deletion:** Deferred to future task (folders can be deleted independently)
+
+**Data Model:**
+```typescript
+interface Note {
+  id: string;        // UUID v4
+  folderId: string;  // Parent folder reference
+  title: string;     // User-provided, max 200 chars
+  createdAt: number; // Unix timestamp (ms)
+  updatedAt: number; // Unix timestamp (ms)
+}
+```
+
+**Storage Strategy:**
+- Single AsyncStorage key: `@notes`
+- JSON array of all notes
+- CRUD operations: load all → filter by folderId → modify → save all → return filtered
+- Public API returns folder-scoped results (no UI filtering needed)
+
+**Structure Added:**
+```
+src/
+├── types/
+│   └── models.ts              # Added Note interface
+├── storage/
+│   └── notes.ts               # ✅ NEW: CRUD with folder-scoped API
+└── screens/
+    └── NoteListScreen.tsx     # ✅ Complete implementation
+```
+
+**Implementation Details:**
+- NoteListScreen follows FolderListScreen pattern (consistent UI/UX)
+- Create note with validation (not empty, max 200 chars)
+- Delete note with confirmation alert
+- Navigate to PageEditor with `(folderId, noteId, pageIndex: 0)`
+- Loading state with ActivityIndicator
+- Empty state: "No notes yet. Create one to get started."
+- UI matches folder screen (same colors, spacing, card design)
+
+**Dependencies Added:**
+- None (reused existing packages)
+
+**Manual Testing:**
+- ✅ TC1: Empty state displays correctly
+- ✅ TC2: Create note with title
+- ✅ TC3: Validation (empty title, 201-char title)
+- ✅ TC4: Multiple notes creation
+- ✅ TC5: Delete note with cancel/confirm
+- ✅ TC6: Navigate to PageEditor with correct params
+- ✅ TC7: Notes scoped by folder (no cross-folder leakage)
+- ✅ TC8: Persistence across app restarts
+- ✅ TC10: Special characters (emojis, symbols) display correctly
+
+**Result:**
+- Working note list with folder-scoped persistence
+- Create, delete notes within folders
+- Navigate to PageEditor with correct route params
+- Notes persist across app restarts
+- All manual tests passed successfully
+- No TypeScript errors
+- Rename functionality skipped (optional)
+- Cascade deletion deferred to future task
+
+---
+
 ## Current App Structure
 
 ```
@@ -157,12 +233,13 @@ src/
 │   │   └── AppNavigator.tsx     # Navigation stack
 │   ├── screens/
 │   │   ├── FolderListScreen.tsx # ✅ Folder CRUD (working)
-│   │   ├── NoteListScreen.tsx   # 🚧 Placeholder (shows folderId)
+│   │   ├── NoteListScreen.tsx   # ✅ Note CRUD (working)
 │   │   └── PageEditorScreen.tsx # 🚧 Placeholder (shows params)
 │   ├── storage/
-│   │   └── folders.ts           # ✅ AsyncStorage CRUD
+│   │   ├── folders.ts           # ✅ Folder AsyncStorage CRUD
+│   │   └── notes.ts             # ✅ Note AsyncStorage CRUD
 │   └── types/
-│       ├── models.ts            # ✅ Data models
+│       ├── models.ts            # ✅ Data models (Folder, Note)
 │       └── navigation.ts        # ✅ Route types
 ├── ios/                         # Native iOS project
 └── android/                     # Native Android project
@@ -286,70 +363,103 @@ bad option: --windowKey=...
 
 ## Next Steps
 
-### Task 4: NoteListScreen with Persistence (Planning Only)
+### Task 5: PageEditorScreen with Drawing Canvas (Planning Only)
 
 **Goal:**
-Implement NoteListScreen to display and manage notes within a folder.
+Implement basic drawing canvas in PageEditorScreen for handwritten notes.
 
 **Requirements:**
-- List notes in a folder (by folderId from navigation params)
-- Create note with title
-- Delete note (optional: rename note)
-- Navigate to PageEditorScreen with (folderId, noteId, pageIndex: 0)
-- Persist notes across app restarts
+- Display drawing canvas for the current page
+- Support basic touch drawing (pen/stylus)
+- Save drawing data to the current page
+- Multiple pages per note (navigation between pages)
+- Persist drawing data across app restarts
 
 **Constraints:**
 - Continue using AsyncStorage (no SQLite yet)
-- Notes scoped to folderId
-- No page content yet (pages come in later task)
-- Keep dependencies minimal
-- No AI, no drawing, no Supabase
+- Pages belong to notes (noteId from route params)
+- Keep dependencies minimal (prefer lightweight canvas libraries)
+- No AI features yet (text recognition, OCR)
+- No advanced drawing tools yet (colors, brush sizes - can add later)
+- No image import yet
 
-**Data Model Proposal:**
+**Data Model Considerations:**
 ```typescript
-interface Note {
+interface Page {
   id: string;           // UUID v4
-  folderId: string;     // Parent folder
-  title: string;        // Note title
+  noteId: string;       // Parent note
+  pageIndex: number;    // Order within note (0-based)
+  drawingData: string;  // Canvas drawing data (format TBD)
   createdAt: number;    // Unix timestamp
   updatedAt: number;    // Unix timestamp
 }
 ```
 
-**Storage Approach:**
-- AsyncStorage key: `@notes`
-- JSON array of all notes
-- Filter by folderId in UI
-- CRUD similar to folders pattern
+**Technical Decisions Needed:**
+1. **Canvas Library:**
+   - React Native Canvas?
+   - react-native-skia?
+   - react-native-svg with touch handlers?
+   - Other lightweight option?
 
-**Prompt for Task 4 Planning:**
+2. **Drawing Data Format:**
+   - SVG paths?
+   - Base64 PNG?
+   - Array of stroke coordinates?
+   - Consider storage size vs rendering performance
+
+3. **Storage Strategy:**
+   - Pages stored per note: `@pages_<noteId>`?
+   - Or single `@pages` key with noteId filtering?
+   - How to handle large drawing data?
+
+4. **Multi-page Navigation:**
+   - Swipe gestures between pages?
+   - Page counter/indicator UI?
+   - Add/delete page controls?
+
+**Prompt for Task 5 Planning:**
 
 ```
-Proceed to Task 4, planning only.
+Proceed to Task 5, planning only.
 
-Task 4 goal:
-Implement NoteListScreen with local persistence and CRUD:
-- List notes in the current folder (folderId from route params)
-- Create note with title input
-- Delete note with confirmation
-- Rename note (optional if too much)
-- Navigate to PageEditorScreen with (folderId, noteId, pageIndex: 0)
-- Persist across app restarts
+Task 5 goal:
+Implement PageEditorScreen with basic drawing canvas functionality.
+
+Requirements:
+- Display drawing canvas for current page (using folderId, noteId, pageIndex from route params)
+- Support touch/stylus drawing (basic pen tool)
+- Save drawing data to current page
+- Support multiple pages per note (page navigation: prev/next, add page)
+- Persist drawing data across app restarts
+- Display page counter (e.g., "Page 1 of 3")
 
 Constraints:
-- Continue using AsyncStorage (defer SQLite until pages need it)
-- Notes must be scoped to folderId
-- No page content/drawing yet
-- Keep dependencies minimal
-- No Supabase, no AI
+- Continue using AsyncStorage (no SQLite yet)
+- Pages scoped by noteId
+- Keep dependencies minimal (prefer lightweight canvas libraries)
+- No AI, no OCR, no text recognition yet
+- No advanced tools yet (colors, brushes, eraser can come later)
+- No image import yet
+- iPad-optimized (large canvas, touch-friendly controls)
 
 For the plan include:
-1) Data model for notes (id, folderId, title, timestamps)
-2) Storage approach (AsyncStorage strategy)
-3) Files to create/modify
-4) Definition of done + manual test checklist
+1) Canvas library recommendation with rationale (compare 2-3 options)
+2) Page data model (id, noteId, pageIndex, drawingData format)
+3) Storage strategy for drawing data (format, size considerations)
+4) Multi-page navigation approach (UI/UX)
+5) Files to create/modify
+6) Definition of done + manual test checklist
 
 Do not modify files until I approve.
+
+After Task 5 is implemented and verified, update PROJECT_STATE.md with:
+- Task 5 completion summary
+- any new dependencies
+- any issues/workarounds
+- the exact planning-only prompt for Task 6
+
+Stop after updating PROJECT_STATE.md.
 ```
 
 ---
@@ -430,7 +540,8 @@ xcrun simctl list devices | grep -i ipad
 - Task 1: ~46 lines (App.tsx)
 - Task 2: ~180 lines (navigation + screens)
 - Task 3: ~280 lines (FolderListScreen + storage)
-- **Total:** ~506 lines of application code
+- Task 4: ~390 lines (NoteListScreen + note storage + Note model)
+- **Total:** ~896 lines of application code
 
 **Build Time:**
 - Clean build: ~3-4 minutes

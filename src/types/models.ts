@@ -4,3 +4,11 @@ export interface Folder {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface Note {
+  id: string;
+  folderId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}

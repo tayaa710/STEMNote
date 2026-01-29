@@ -12,3 +12,11 @@ export interface Note {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface Page {
+  id: string;
+  noteId: string;
+  pageIndex: number;
+  createdAt: number;
+  updatedAt: number;
+}

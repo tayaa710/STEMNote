@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
 **Last Updated:** 2026-01-29
-**Current Task:** Task 4 Complete
-**Status:** ✅ Fully functional with folder and note persistence
+**Current Task:** Task 6 Complete
+**Status:** ✅ Fully functional with folders, notes, and pages persistence
 
 ---
 
@@ -218,6 +218,93 @@ src/
 
 ---
 
+### Task 6: Pages inside a Note with Persistence ✅
+**Goal:** Implement page model with local persistence and basic page navigation
+
+**Key Decisions:**
+- **Storage:** AsyncStorage with single `@pages` key (consistent with folders/notes pattern)
+- **API Design:** Minimal API with only essential functions:
+  - `loadPagesByNote(noteId)` → returns `Page[]` for that note, sorted by pageIndex
+  - `createPage(noteId)` → creates new page with next pageIndex
+  - `ensurePageExists(noteId, pageIndex)` → auto-creates page if missing
+- **pageIndex handling:** 0-based indexing with automatic clamping to valid range
+- **Auto-creation:** First page (pageIndex = 0) auto-creates when opening a note
+- **Invalid pageIndex:** Clamps to last valid page, updates navigation params
+- **useEffect loop prevention:** Uses `useRef` to track last processed pageIndex
+
+**Data Model:**
+```typescript
+interface Page {
+  id: string;           // UUID v4
+  noteId: string;       // Parent note reference
+  pageIndex: number;    // 0-based order within note
+  createdAt: number;    // Unix timestamp (ms)
+  updatedAt: number;    // Unix timestamp (ms)
+  // No content field yet - drawing will be Task 7
+}
+```
+
+**Storage Strategy:**
+- Single AsyncStorage key: `@pages`
+- JSON array of all pages across all notes
+- CRUD operations: load all → filter by noteId → modify → save all → return filtered
+- Pages sorted by pageIndex when returned
+- Orphaned pages acceptable (cascade deletion deferred)
+
+**Structure Added:**
+```
+src/
+├── types/
+│   └── models.ts              # Added Page interface
+├── storage/
+│   └── pages.ts               # ✅ NEW: Page CRUD with minimal API
+└── screens/
+    └── PageEditorScreen.tsx   # ✅ Fully implemented with navigation
+```
+
+**Implementation Details:**
+
+**PageEditorScreen Features:**
+1. **Page counter display**: "Page X of Y" at top
+2. **Navigation controls**: Previous / Next buttons (disable at boundaries)
+3. **Create button**: "+ New Page" (always enabled, shows spinner during creation)
+4. **Content area**: Placeholder for future drawing canvas (Task 7)
+5. **Loading states**: Spinner with "Loading page..." text
+6. **Smart initialization**:
+   - No pages + pageIndex 0: Auto-create first page
+   - No pages + pageIndex > 0: Set to 0, then auto-create
+   - Pages exist + invalid pageIndex: Clamp to last valid page
+7. **Loop prevention**: Uses `lastProcessedIndex` ref to avoid setParams loops
+
+**Dependencies Added:**
+- None (reused existing packages)
+
+**Manual Testing:**
+- ✅ TC1: First page auto-creation
+- ✅ TC2: Create multiple pages (tested up to 4 pages)
+- ✅ TC3: Navigate between pages (Previous/Next)
+- ✅ TC4: Button disable states at boundaries
+- ✅ TC5: Persistence across app restarts
+- ✅ TC6: Multiple notes isolation (tested 3 notes with different page counts)
+- ✅ TC7: Create page at end
+- ✅ TC8: Empty note → new note → first page
+- ✅ TC9: Delete note with pages (orphaned pages expected)
+- ✅ TC10: Loading states
+- ✅ Edge cases: Invalid pageIndex clamping, rapid taps, no loops
+
+**Result:**
+- Working page system with full navigation
+- Create, navigate between pages (Previous/Next/New)
+- Pages persist across app restarts
+- Auto-create first page when opening note
+- All 10+ manual tests passed
+- No TypeScript errors
+- No runtime errors or crashes
+- UI/UX consistent with folder/note screens
+- Ready for Task 7 (drawing canvas)
+
+---
+
 ## Current App Structure
 
 ```
@@ -234,12 +321,13 @@ src/
 │   ├── screens/
 │   │   ├── FolderListScreen.tsx # ✅ Folder CRUD (working)
 │   │   ├── NoteListScreen.tsx   # ✅ Note CRUD (working)
-│   │   └── PageEditorScreen.tsx # 🚧 Placeholder (shows params)
+│   │   └── PageEditorScreen.tsx # ✅ Page navigation (working)
 │   ├── storage/
 │   │   ├── folders.ts           # ✅ Folder AsyncStorage CRUD
-│   │   └── notes.ts             # ✅ Note AsyncStorage CRUD
+│   │   ├── notes.ts             # ✅ Note AsyncStorage CRUD
+│   │   └── pages.ts             # ✅ Page AsyncStorage CRUD
 │   └── types/
-│       ├── models.ts            # ✅ Data models (Folder, Note)
+│       ├── models.ts            # ✅ Data models (Folder, Note, Page)
 │       └── navigation.ts        # ✅ Route types
 ├── ios/                         # Native iOS project
 └── android/                     # Native Android project
@@ -363,89 +451,89 @@ bad option: --windowKey=...
 
 ## Next Steps
 
-### Task 6: Pages inside a Note (Planning Only)
+### Task 7: Drawing Canvas MVP (Skia) (Planning Only)
 
 **Goal:**
-Implement page model with local persistence and basic page navigation.
-This task prepares the foundation for drawing but does NOT include drawing yet.
+Implement basic drawing functionality with pen, eraser, undo/redo, and clear.
+Drawing data must persist to AsyncStorage (or migrate to SQLite if needed for performance).
 
 **Requirements:**
-- Pages belong to a note (noteId, folderId)
-- Each page has a pageIndex (0-based)
-- A note can have multiple pages
-- PageEditorScreen becomes a real page viewer shell:
-  - Displays current pageIndex
-  - Buttons: Previous Page / Next Page
-  - Button: Create New Page
-- Pages persist across app restarts
-- Navigating from NoteList opens PageEditor at pageIndex = 0
-- Navigation params remain: (folderId, noteId, pageIndex)
+- Drawing tools: Pen, Eraser
+- Undo/Redo functionality
+- Clear canvas button
+- Drawing data persists with page (save/load)
+- Drawing should feel responsive on iPad
+- Works with existing page navigation (don't break Task 6)
 
 **Constraints:**
-- Continue using AsyncStorage (no SQLite yet)
-- Keep dependencies minimal (no new libs unless absolutely necessary)
-- No drawing yet (page content can be empty placeholder)
-- No AI, no Supabase
-- No schema migrations required yet
+- No AI integration yet (Task 10+)
+- No export to PNG yet (Task 8)
+- No selection mode yet (Task 9)
+- Evaluate if AsyncStorage is sufficient or if SQLite migration is needed
+- Consider performance with large drawings
 
-**Data Model:**
+**Likely Technology:**
+- React Native Skia (recommended for performance)
+- Alternative: react-native-canvas or react-native-svg
+- Drawing data format: Path commands or simplified stroke format
+
+**Data Model Updates:**
 ```typescript
 interface Page {
-  id: string;           // UUID v4
-  noteId: string;       // Parent note
-  pageIndex: number;    // Order within note (0-based)
-  createdAt: number;    // Unix timestamp
-  updatedAt: number;    // Unix timestamp
+  id: string;
+  noteId: string;
+  pageIndex: number;
+  createdAt: number;
+  updatedAt: number;
+  drawingData?: string;  // NEW: JSON string of drawing paths/strokes
 }
 ```
 
-**Prompt for Task 6 Planning:**
+**Prompt for Task 7 Planning:**
 
 ```
-Proceed to Task 6, planning only.
+Proceed to Task 7, planning only.
 
-Task 6 goal:
-Implement Pages inside a Note, with local persistence and basic page navigation.
-This task prepares the foundation for drawing but does NOT include drawing yet.
+Task 7 goal:
+Implement basic drawing canvas with pen, eraser, undo/redo, and clear functionality.
+Drawing data must persist across app restarts.
 
 Requirements:
-- Pages belong to a note (noteId, folderId)
-- Each page has a pageIndex (0-based)
-- A note can have multiple pages
-- PageEditorScreen becomes a real page viewer shell:
-  - Displays current pageIndex
-  - Buttons: Previous Page / Next Page
-  - Button: Create New Page
-- Pages persist across app restarts
-- Navigating from NoteList opens PageEditor at pageIndex = 0
-- Navigation params remain: (folderId, noteId, pageIndex)
+- Drawing canvas fills the content area in PageEditorScreen
+- Tools: Pen (black, medium stroke), Eraser
+- Actions: Undo, Redo, Clear
+- Drawing data saves to page automatically (on stroke end or periodic)
+- Drawing loads when navigating to page
+- Performance: Should feel responsive on iPad (60fps drawing)
+- Don't break existing page navigation (Previous/Next/Create)
 
 Constraints:
-- Continue using AsyncStorage (no SQLite yet)
-- Keep dependencies minimal (no new libs unless absolutely necessary)
-- No drawing yet (page content can be empty placeholder)
-- No AI, no Supabase
-- No schema migrations required yet
+- No AI yet (Task 10+)
+- No export yet (Task 8)
+- No selection yet (Task 9)
+- Evaluate AsyncStorage vs SQLite for drawing data storage
+- Keep dependencies minimal (justify any new libraries)
 
 For the plan include:
-1) Page data model (id, noteId, pageIndex, timestamps, placeholder content)
-2) Storage strategy:
-   - AsyncStorage keying
-   - How pages are loaded by noteId
-   - How pageIndex ordering is maintained
-3) Files to create/modify
-4) Definition of done
-5) Manual test checklist
+1) Technology choice (Skia vs alternatives) with justification
+2) Drawing data format and storage strategy
+3) Integration with existing PageEditorScreen
+4) Files to create/modify
+5) Performance considerations
+6) Definition of done
+7) Manual test checklist
 
 Important:
 - Do not modify files until I explicitly approve
-- Keep changes incremental and isolated to pages + PageEditorScreen
+- Evaluate if AsyncStorage is sufficient or if SQLite migration is needed
+- Consider drawing data size and serialization performance
 
-After Task 6 is implemented and verified, update PROJECT_STATE.md with:
-- Task 6 completion summary
+After Task 7 is implemented and verified, update PROJECT_STATE.md with:
+- Task 7 completion summary
 - any new dependencies
 - any issues/workarounds
-- the exact planning-only prompt for Task 7
+- any storage migration details
+- the exact planning-only prompt for Task 8
 
 Stop after updating PROJECT_STATE.md.
 ```
@@ -529,7 +617,8 @@ xcrun simctl list devices | grep -i ipad
 - Task 2: ~180 lines (navigation + screens)
 - Task 3: ~280 lines (FolderListScreen + storage)
 - Task 4: ~390 lines (NoteListScreen + note storage + Note model)
-- **Total:** ~896 lines of application code
+- Task 6: ~395 lines (PageEditorScreen + page storage + Page model)
+- **Total:** ~1,291 lines of application code
 
 **Build Time:**
 - Clean build: ~3-4 minutes

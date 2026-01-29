@@ -1,21 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  AppState,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { RootStackParamList } from '../types/navigation';
-import { Page } from '../types/models';
+import { DrawingData, DrawingTool, Page } from '../types/models';
 import {
   loadPagesByNote,
   createPage,
   ensurePageExists,
 } from '../storage/pages';
+import { loadDrawingData, saveDrawingData } from '../storage/drawings';
+import DrawingCanvas, { DrawingCanvasHandle } from '../components/DrawingCanvas';
+import DrawingToolbar from '../components/DrawingToolbar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PageEditor'>;
+
+const DRAWING_SAVE_DEBOUNCE_MS = 500;
+const EMPTY_DRAWING: DrawingData = { version: 1, strokes: [] };
 
 const PageEditorScreen = ({ route, navigation }: Props) => {
   const { folderId, noteId, pageIndex } = route.params;
@@ -24,14 +33,31 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [currentPage, setCurrentPage] = useState<Page | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [drawingData, setDrawingData] = useState<DrawingData | null>(null);
+  const [activeTool, setActiveTool] = useState<DrawingTool>('pen');
+  const [savingDrawing, setSavingDrawing] = useState(false);
+  const [loadingDrawing, setLoadingDrawing] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   // Track last processed pageIndex to avoid setParams loops
   const lastProcessedIndex = useRef<number | null>(null);
+  const initialLoadRef = useRef(true);
+  const lastNoteIdRef = useRef<string | null>(null);
+  const drawingDataRef = useRef<DrawingData | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentPageIdRef = useRef<string | null>(null);
+  const previousPageIdRef = useRef<string | null>(null);
+  const canvasRef = useRef<DrawingCanvasHandle | null>(null);
+  const headerHeight = useHeaderHeight();
 
   // Load and initialize pages
   useEffect(() => {
     const initializePages = async () => {
-      setLoading(true);
+      const shouldShowLoading = initialLoadRef.current || lastNoteIdRef.current !== noteId;
+      if (shouldShowLoading) {
+        setLoading(true);
+      }
       try {
         let loadedPages = await loadPagesByNote(noteId);
 
@@ -76,12 +102,144 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
       } catch (error) {
         console.error('Failed to initialize pages:', error);
       } finally {
-        setLoading(false);
+        if (shouldShowLoading) {
+          setLoading(false);
+        }
+        initialLoadRef.current = false;
+        lastNoteIdRef.current = noteId;
       }
     };
 
     initializePages();
   }, [noteId, pageIndex, navigation]);
+
+  const persistDrawing = useCallback(async (pageId: string, data: DrawingData) => {
+    setSavingDrawing(true);
+    try {
+      await saveDrawingData(pageId, data);
+    } catch (error) {
+      console.error('Failed to save drawing data:', error);
+    } finally {
+      setSavingDrawing(false);
+    }
+  }, []);
+
+  const flushSave = useCallback(
+    async (pageId: string | null) => {
+      if (!pageId) {
+        return;
+      }
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      const dataToSave = drawingDataRef.current ?? EMPTY_DRAWING;
+      await persistDrawing(pageId, dataToSave);
+    },
+    [persistDrawing],
+  );
+
+  const handleDrawingChange = useCallback(
+    (updatedData: DrawingData) => {
+      const pageId = currentPageIdRef.current;
+      if (!pageId) {
+        return;
+      }
+      drawingDataRef.current = updatedData;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        void persistDrawing(pageId, updatedData);
+      }, DRAWING_SAVE_DEBOUNCE_MS);
+    },
+    [persistDrawing],
+  );
+
+  const handleHistoryChange = useCallback((undoAvailable: boolean, redoAvailable: boolean) => {
+    setCanUndo(undoAvailable);
+    setCanRedo(redoAvailable);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    canvasRef.current?.undo();
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    canvasRef.current?.redo();
+  }, []);
+
+  const handleClear = useCallback(() => {
+    canvasRef.current?.clear();
+  }, []);
+
+  useEffect(() => {
+    const previousPageId = previousPageIdRef.current;
+    if (previousPageId && previousPageId !== currentPage?.id) {
+      void flushSave(previousPageId);
+    }
+    previousPageIdRef.current = currentPage?.id ?? null;
+  }, [currentPage?.id, flushSave]);
+
+  useEffect(() => {
+    const pageId = currentPage?.id;
+    if (!pageId) {
+      setDrawingData(null);
+      drawingDataRef.current = null;
+      return;
+    }
+
+    currentPageIdRef.current = pageId;
+    setLoadingDrawing(true);
+    setCanUndo(false);
+    setCanRedo(false);
+
+    let isActive = true;
+    const loadDrawing = async () => {
+      try {
+        const data = await loadDrawingData(pageId);
+        if (!isActive) {
+          return;
+        }
+        const resolved = data ?? EMPTY_DRAWING;
+        setDrawingData(resolved);
+        drawingDataRef.current = resolved;
+      } catch (error) {
+        console.error('Failed to load drawing data:', error);
+        if (isActive) {
+          setDrawingData(EMPTY_DRAWING);
+          drawingDataRef.current = EMPTY_DRAWING;
+        }
+      } finally {
+        if (isActive) {
+          setLoadingDrawing(false);
+        }
+      }
+    };
+
+    loadDrawing();
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentPage?.id]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'inactive' || nextState === 'background') {
+        void flushSave(currentPageIdRef.current);
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [flushSave]);
+
+  useEffect(() => {
+    return () => {
+      void flushSave(currentPageIdRef.current);
+    };
+  }, [flushSave]);
 
   const handlePreviousPage = () => {
     if (pageIndex > 0) {
@@ -119,10 +277,12 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Loading page...</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <View style={[styles.loadingContainer, { paddingTop: headerHeight }]}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Loading page...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -133,7 +293,8 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const isNextDisabled = pageIndex >= totalPages - 1;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <View style={[styles.container, { paddingTop: headerHeight }]}>
       {/* Page info section */}
       <View style={styles.pageInfoSection}>
         <Text style={styles.pageInfoText}>
@@ -141,12 +302,28 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
         </Text>
       </View>
 
-      {/* Content area - placeholder for future drawing canvas */}
-      <View style={styles.contentArea}>
-        <Text style={styles.placeholderText}>Page content will appear here</Text>
-        {currentPage && (
-          <Text style={styles.pageIdText}>Page ID: {currentPage.id.slice(0, 8)}...</Text>
-        )}
+      <DrawingToolbar
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onClear={handleClear}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        saving={savingDrawing}
+        loading={loadingDrawing}
+      />
+
+      <View style={styles.canvasContainer}>
+        <DrawingCanvas
+          ref={canvasRef}
+          pageId={currentPage?.id ?? ''}
+          drawingData={drawingData}
+          activeTool={activeTool}
+          onDrawingChange={handleDrawingChange}
+          onHistoryChange={handleHistoryChange}
+          isInteractive={!loadingDrawing}
+        />
       </View>
 
       {/* Navigation controls */}
@@ -183,11 +360,16 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -215,22 +397,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
-  contentArea: {
+  canvasContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fafafa',
-    padding: 20,
-  },
-  placeholderText: {
-    fontSize: 18,
-    color: '#999',
-    marginBottom: 12,
-  },
-  pageIdText: {
-    fontSize: 12,
-    color: '#ccc',
-    fontFamily: 'Menlo, monospace',
+    backgroundColor: '#ffffff',
   },
   navigationBar: {
     flexDirection: 'row',

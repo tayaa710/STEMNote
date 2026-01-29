@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
 **Last Updated:** 2026-01-29
-**Current Task:** Task 6 Complete
-**Status:** ✅ Fully functional with folders, notes, and pages persistence
+**Current Task:** Task 7 Complete
+**Status:** ✅ Drawing canvas MVP implemented with per-page persistence
 
 ---
 
@@ -301,7 +301,72 @@ src/
 - No TypeScript errors
 - No runtime errors or crashes
 - UI/UX consistent with folder/note screens
-- Ready for Task 7 (drawing canvas)
+- Foundation for Task 7 drawing features
+
+---
+
+### Task 7: Drawing Canvas MVP (Skia) ✅
+**Goal:** Implement drawing with pen/eraser, undo/redo, clear, and persistence.
+
+**Key Decisions:**
+- **Rendering:** Skia Canvas for strokes, React Native PanResponder for touch capture
+- **Storage:** Separate AsyncStorage key `@pageDrawings` (pageId → JSON string of DrawingData)
+- **Point Sampling:** Ignore points closer than ~2px (no Douglas–Peucker yet)
+- **Eraser MVP:** Tap-to-delete stroke only (no drag erase, no path splitting)
+- **Undo/Redo:** History capped at 20; stacks cleared on page change
+- **Autosave:** Debounce on stroke end (500ms), plus flush on page change and app background
+
+**Data Model:**
+```typescript
+interface DrawingData {
+  version: number;
+  strokes: Stroke[];
+}
+
+interface Stroke {
+  id: string;
+  points: Point[];
+  color: string;
+  width: number;
+  tool: 'pen';
+  timestamp: number;
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+```
+
+**Storage Strategy:**
+- AsyncStorage key: `@pageDrawings`
+- Value: `{ [pageId: string]: string }` where string = JSON.stringify(DrawingData)
+
+**Structure Added:**
+```
+src/
+├── components/
+│   ├── DrawingCanvas.tsx        # ✅ Skia canvas + drawing logic
+│   └── DrawingToolbar.tsx       # ✅ Pen/Eraser/Undo/Redo/Clear
+├── storage/
+│   └── drawings.ts              # ✅ Drawing persistence helpers
+└── types/
+    └── models.ts                # ✅ Drawing types added
+```
+
+**Implementation Details:**
+- PageEditorScreen integrates toolbar + canvas and loads/saves per-page drawings
+- Autosave debounced on stroke end, with explicit flush on page change/background
+- Eraser uses stroke hit-testing to remove the top-most stroke under a tap
+
+**Dependencies Updated:**
+- `@shopify/react-native-skia` ^2.4.16
+
+**Manual Testing:**
+- Not run (iOS simulator unavailable in CLI: CoreSimulatorService connection invalid)
+
+**Result:**
+- Drawing canvas MVP implemented with persistence, undo/redo, clear, and eraser
 
 ---
 
@@ -316,18 +381,22 @@ src/
 ├── package.json                 # Dependencies
 ├── App.tsx                      # App entry point
 ├── src/
+│   ├── components/
+│   │   ├── DrawingCanvas.tsx     # ✅ Skia drawing canvas
+│   │   └── DrawingToolbar.tsx    # ✅ Drawing tools/actions
 │   ├── navigation/
 │   │   └── AppNavigator.tsx     # Navigation stack
 │   ├── screens/
 │   │   ├── FolderListScreen.tsx # ✅ Folder CRUD (working)
 │   │   ├── NoteListScreen.tsx   # ✅ Note CRUD (working)
-│   │   └── PageEditorScreen.tsx # ✅ Page navigation (working)
+│   │   └── PageEditorScreen.tsx # ✅ Page navigation + drawing
 │   ├── storage/
 │   │   ├── folders.ts           # ✅ Folder AsyncStorage CRUD
 │   │   ├── notes.ts             # ✅ Note AsyncStorage CRUD
-│   │   └── pages.ts             # ✅ Page AsyncStorage CRUD
+│   │   ├── pages.ts             # ✅ Page AsyncStorage CRUD
+│   │   └── drawings.ts          # ✅ Drawing AsyncStorage CRUD
 │   └── types/
-│       ├── models.ts            # ✅ Data models (Folder, Note, Page)
+│       ├── models.ts            # ✅ Data models (Folder, Note, Page, Drawing)
 │       └── navigation.ts        # ✅ Route types
 ├── ios/                         # Native iOS project
 └── android/                     # Native Android project
@@ -398,6 +467,7 @@ npm run lint
 - `@react-navigation/native-stack` ^7.2.1
 - `react-native-screens` ^4.5.0
 - `@react-native-async-storage/async-storage` ^2.2.0
+- `@shopify/react-native-skia` ^2.4.16
 - `uuid` ^13.0.0
 - `react-native-get-random-values` ^2.0.0
 
@@ -406,8 +476,8 @@ npm run lint
 - `@types/uuid` ^10.0.0
 - (plus standard RN dev dependencies)
 
-**Total npm packages:** 876
-**Total CocoaPods:** 83 dependencies, 82 pods
+**Total npm packages:** 881
+**Total CocoaPods:** 84 dependencies, 83 pods
 
 ---
 
@@ -449,75 +519,67 @@ bad option: --windowKey=...
 
 ---
 
+### iOS Simulator Unavailable (Task 7)
+**Issue:** `npm run ios` failed because CoreSimulatorService could not be reached.
+
+**Symptoms:**
+- `xcrun simctl list --json devices` failed with "Connection refused"
+- "CoreSimulatorService connection became invalid"
+- "Cannot start server in new windows because no terminal app was specified"
+
+**Impact:** iOS run could not be completed from this CLI session.
+
+**Workaround:**
+- Launch Simulator.app or Xcode to restart CoreSimulatorService
+- Start Metro manually (`npm start`) then rerun `npm run ios -- --simulator="iPad Pro 11-inch (M4)"`
+
+---
+
 ## Next Steps
 
-### Task 7: Drawing Canvas MVP (Skia) (Planning Only)
+### Task 8: Render/Export Full Page to PNG (Planning Only)
 
 **Goal:**
-Implement basic drawing functionality with pen, eraser, undo/redo, and clear.
-Drawing data must persist to AsyncStorage (or migrate to SQLite if needed for performance).
+Render the current page to a PNG file at a stable resolution.
 
 **Requirements:**
-- Drawing tools: Pen, Eraser
-- Undo/Redo functionality
-- Clear canvas button
-- Drawing data persists with page (save/load)
-- Drawing should feel responsive on iPad
-- Works with existing page navigation (don't break Task 6)
+- Export current page drawing to PNG (visual match to page)
+- Choose and document export size/scale strategy
+- Save PNG to device storage with deterministic naming
+- Provide a UI action to trigger export
+- Use existing drawing data from `@pageDrawings`
+- Keep page metadata unchanged
 
 **Constraints:**
+- No selection/region export yet (Task 9)
 - No AI integration yet (Task 10+)
-- No export to PNG yet (Task 8)
-- No selection mode yet (Task 9)
-- Evaluate if AsyncStorage is sufficient or if SQLite migration is needed
-- Consider performance with large drawings
+- Keep dependencies minimal
 
-**Likely Technology:**
-- React Native Skia (recommended for performance)
-- Alternative: react-native-canvas or react-native-svg
-- Drawing data format: Path commands or simplified stroke format
-
-**Data Model Updates:**
-```typescript
-interface Page {
-  id: string;
-  noteId: string;
-  pageIndex: number;
-  createdAt: number;
-  updatedAt: number;
-  drawingData?: string;  // NEW: JSON string of drawing paths/strokes
-}
-```
-
-**Prompt for Task 7 Planning:**
+**Prompt for Task 8 Planning:**
 
 ```
-Proceed to Task 7, planning only.
+Proceed to Task 8, planning only.
 
-Task 7 goal:
-Implement basic drawing canvas with pen, eraser, undo/redo, and clear functionality.
-Drawing data must persist across app restarts.
+Task 8 goal:
+Render/export the full page to a PNG file at a stable resolution.
 
 Requirements:
-- Drawing canvas fills the content area in PageEditorScreen
-- Tools: Pen (black, medium stroke), Eraser
-- Actions: Undo, Redo, Clear
-- Drawing data saves to page automatically (on stroke end or periodic)
-- Drawing loads when navigating to page
-- Performance: Should feel responsive on iPad (60fps drawing)
-- Don't break existing page navigation (Previous/Next/Create)
+- Export current page drawing to PNG and save to device storage
+- Output should visually match the page
+- Decide and document export size/scale strategy
+- Integrate an export trigger in PageEditorScreen UI
+- Use existing drawing data from @pageDrawings
+- Do not modify page metadata
 
 Constraints:
-- No AI yet (Task 10+)
-- No export yet (Task 8)
-- No selection yet (Task 9)
-- Evaluate AsyncStorage vs SQLite for drawing data storage
-- Keep dependencies minimal (justify any new libraries)
+- No selection/region export yet (Task 9)
+- No AI integration yet (Task 10+)
+- Keep dependencies minimal; justify any new libraries
 
 For the plan include:
-1) Technology choice (Skia vs alternatives) with justification
-2) Drawing data format and storage strategy
-3) Integration with existing PageEditorScreen
+1) Rendering approach (Skia snapshot/offscreen surface)
+2) File system location and naming
+3) UI/UX integration
 4) Files to create/modify
 5) Performance considerations
 6) Definition of done
@@ -525,17 +587,8 @@ For the plan include:
 
 Important:
 - Do not modify files until I explicitly approve
-- Evaluate if AsyncStorage is sufficient or if SQLite migration is needed
-- Consider drawing data size and serialization performance
 
-After Task 7 is implemented and verified, update PROJECT_STATE.md with:
-- Task 7 completion summary
-- any new dependencies
-- any issues/workarounds
-- any storage migration details
-- the exact planning-only prompt for Task 8
-
-Stop after updating PROJECT_STATE.md.
+Stop after the plan.
 ```
 
 ---
@@ -618,7 +671,8 @@ xcrun simctl list devices | grep -i ipad
 - Task 3: ~280 lines (FolderListScreen + storage)
 - Task 4: ~390 lines (NoteListScreen + note storage + Note model)
 - Task 6: ~395 lines (PageEditorScreen + page storage + Page model)
-- **Total:** ~1,291 lines of application code
+- Task 7: ~700 lines (DrawingCanvas + toolbar + drawing storage + PageEditor updates)
+- **Total:** ~2,000 lines of application code
 
 **Build Time:**
 - Clean build: ~3-4 minutes

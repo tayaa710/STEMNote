@@ -20,3 +20,24 @@ export interface Page {
   createdAt: number;
   updatedAt: number;
 }
+
+export type DrawingTool = 'pen' | 'eraser';
+
+export interface DrawingData {
+  version: number;
+  strokes: Stroke[];
+}
+
+export interface Stroke {
+  id: string;
+  points: Point[];
+  color: string;
+  width: number;
+  tool: 'pen';
+  timestamp: number;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}

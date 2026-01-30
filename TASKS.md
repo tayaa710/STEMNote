@@ -104,7 +104,7 @@ DoD:
 New deps:
 - None (used existing react-native-fs)
 
-## Task 9 — Selection mode + region export 🚧 NEXT
+## Task 9 — Selection mode + region export ✅ DONE
 Goal:
 - Add selection mode:
   - user lassos a region (simple bounding box is acceptable)
@@ -113,31 +113,42 @@ Goal:
 DoD:
 - Region export works and matches selected area.
 
-### Planning prompt for Task 9
-```
-Proceed to Task 9, planning only.
+New deps:
+- None (used existing @shopify/react-native-skia and react-native-fs)
 
-Task 9 goal:
-Add selection mode and export the selected region to PNG.
+## Task 10 — AskSheet UI (no backend yet) 🚧 NEXT
+Goal:
+- UI panel with question input and answer view.
+- For now, return a mocked answer.
+
+DoD:
+- Can ask and see response; citations UI present (mocked).
+
+### Planning prompt for Task 10
+```
+Proceed to Task 10, planning only.
+
+Task 10 goal:
+Add AskSheet UI panel with question input and answer view (mocked backend for now).
 
 Requirements:
-- Add a selection mode toggle in PageEditorScreen
-- Allow the user to select a region (rectangular selection is OK for MVP)
-- Export only the selected region to a PNG
-- Output should visually match the selected area
-- Save PNG to device storage with deterministic naming
-- Provide user feedback (success/error + file location)
+- Add a panel/modal UI for asking questions about the current region/page
+- User can type a question in a text input
+- Display a mocked answer with citations UI
+- Citations should show page references (mocked data)
+- Panel can be opened from selection mode or page context
 
 Constraints:
-- No AI integration yet
-- Keep dependencies minimal; justify any new libraries
-- Reuse existing drawing data and export utilities where possible
+- No AI backend yet (mock the response)
+- Keep dependencies minimal
+- UI should be iPad-friendly (large touch targets, readable text)
+- Reuse existing design patterns from the app
 
 For the plan include:
-1) Selection interaction/UX (how to draw/adjust selection)
-2) Rendering/cropping approach for region export
-3) File system location and naming
-4) UI changes
+1) UI/UX design (how the panel opens, layout, dismiss behavior)
+2) Question input and submit flow
+3) Answer display with citations UI
+4) Mock data structure for responses
 5) Files to create/modify
 6) Definition of done
 7) Manual test checklist
@@ -147,14 +158,6 @@ Important:
 
 Stop after the plan.
 ```
-
-## Task 10 — AskSheet UI (no backend yet)
-Goal:
-- UI panel with question input and answer view.
-- For now, return a mocked answer.
-
-DoD:
-- Can ask and see response; citations UI present (mocked).
 
 ## Task 11 — Supabase project wiring (backend skeleton)
 Goal:

@@ -14,7 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useHeaderHeight } from '@react-navigation/elements';
 import RNFS from 'react-native-fs';
 import { RootStackParamList } from '../types/navigation';
-import { DrawingData, DrawingTool, Page } from '../types/models';
+import { DrawingData, DrawingTool, Page, SelectionRect } from '../types/models';
 import {
   loadPagesByNote,
   createPage,
@@ -26,6 +26,7 @@ import DrawingToolbar from '../components/DrawingToolbar';
 import {
   getExportSizeForLogicalSize,
   renderDrawingToPngBase64,
+  renderRegionToPngBase64,
 } from '../utils/exportDrawing';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PageEditor'>;
@@ -48,6 +49,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [canRedo, setCanRedo] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
+  const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
 
   // Track last processed pageIndex to avoid setParams loops
   const lastProcessedIndex = useRef<number | null>(null);
@@ -196,6 +198,14 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
     }
   }, []);
 
+  const handleSelectionChange = useCallback((rect: SelectionRect | null) => {
+    setSelectionRect(rect);
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectionRect(null);
+  }, []);
+
   const handleExportPng = useCallback(async () => {
     if (exporting) {
       return;
@@ -233,6 +243,44 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
       setExporting(false);
     }
   }, [exporting, flushSave, noteId, pageIndex]);
+
+  const handleExportSelection = useCallback(async () => {
+    if (exporting || !selectionRect) {
+      return;
+    }
+    const pageId = currentPageIdRef.current;
+    const logicalSize = canvasSizeRef.current;
+    if (!pageId || !logicalSize) {
+      Alert.alert('Export unavailable', 'Canvas is not ready yet.');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const latestData =
+        canvasRef.current?.getDrawingData() ??
+        drawingDataRef.current ??
+        EMPTY_DRAWING;
+      drawingDataRef.current = latestData;
+      await flushSave(pageId);
+
+      const base64 = renderRegionToPngBase64(latestData, logicalSize, selectionRect);
+
+      const exportDir = `${RNFS.DocumentDirectoryPath}/exports`;
+      await RNFS.mkdir(exportDir);
+      const filename = `note_${noteId}_page_${pageIndex + 1}_region_${Date.now()}.png`;
+      const filePath = `${exportDir}/${filename}`;
+      await RNFS.writeFile(filePath, base64, 'base64');
+
+      Alert.alert('Exported Selection', `Saved to:\n${filePath}`);
+      setSelectionRect(null); // Clear selection after successful export
+    } catch (error) {
+      console.error('Failed to export selection:', error);
+      Alert.alert('Export failed', 'Unable to export selection. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, selectionRect, flushSave, noteId, pageIndex]);
 
   useEffect(() => {
     const previousPageId = previousPageIdRef.current;
@@ -301,6 +349,17 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
       void flushSave(currentPageIdRef.current);
     };
   }, [flushSave]);
+
+  // Clear selection when switching tools away from select, or when page changes
+  useEffect(() => {
+    if (activeTool !== 'select') {
+      setSelectionRect(null);
+    }
+  }, [activeTool]);
+
+  useEffect(() => {
+    setSelectionRect(null);
+  }, [currentPage?.id]);
 
   const handlePreviousPage = () => {
     if (pageIndex > 0) {
@@ -390,6 +449,9 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
         canRedo={canRedo}
         saving={savingDrawing}
         loading={loadingDrawing}
+        hasSelection={selectionRect !== null}
+        onClearSelection={handleClearSelection}
+        onExportSelection={handleExportSelection}
       />
 
       <View style={styles.canvasContainer} onLayout={handleCanvasLayout}>
@@ -401,6 +463,8 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
           onDrawingChange={handleDrawingChange}
           onHistoryChange={handleHistoryChange}
           isInteractive={!loadingDrawing}
+          selectionRect={selectionRect}
+          onSelectionChange={handleSelectionChange}
         />
       </View>
 

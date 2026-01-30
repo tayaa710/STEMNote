@@ -9,9 +9,15 @@ import React, {
   useState,
 } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
-import { Canvas, Path, Skia } from '@shopify/react-native-skia';
+import { Canvas, Path, Rect, Skia } from '@shopify/react-native-skia';
 import { v4 as uuidv4 } from 'uuid';
-import { DrawingData, DrawingTool, Point, Stroke } from '../types/models';
+import {
+  DrawingData,
+  DrawingTool,
+  Point,
+  SelectionRect,
+  Stroke,
+} from '../types/models';
 
 const DRAWING_VERSION = 1;
 const DEFAULT_COLOR = '#111111';
@@ -22,6 +28,7 @@ const ERASER_TAP_SLOP = 12;
 const ERASER_TAP_SLOP_SQ = ERASER_TAP_SLOP * ERASER_TAP_SLOP;
 const ERASER_HIT_PADDING = 12;
 const MAX_HISTORY = 20;
+const MIN_SELECTION_SIZE = 5;
 
 type HistoryStack = Stroke[][];
 
@@ -155,6 +162,22 @@ function isPointNearStroke(point: Point, stroke: Stroke): boolean {
   return false;
 }
 
+interface SelectionDragState {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+}
+
+function normalizeToRect(drag: SelectionDragState): SelectionRect {
+  return {
+    x: Math.min(drag.startX, drag.currentX),
+    y: Math.min(drag.startY, drag.currentY),
+    width: Math.abs(drag.currentX - drag.startX),
+    height: Math.abs(drag.currentY - drag.startY),
+  };
+}
+
 function buildPath(points: Point[]) {
   const path = Skia.Path.Make();
   if (points.length === 0) {
@@ -181,6 +204,8 @@ interface DrawingCanvasProps {
   onDrawingChange: (drawingData: DrawingData) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   isInteractive?: boolean;
+  selectionRect?: SelectionRect | null;
+  onSelectionChange?: (rect: SelectionRect | null) => void;
 }
 
 const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
@@ -192,6 +217,8 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       onDrawingChange,
       onHistoryChange,
       isInteractive = true,
+      selectionRect,
+      onSelectionChange,
     },
     ref,
   ) => {
@@ -210,6 +237,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
     const suppressOnChangeRef = useRef(true);
     const eraserStartRef = useRef<Point | null>(null);
     const eraserMovedRef = useRef(false);
+    const selectionDragRef = useRef<SelectionDragState | null>(null);
+    const [selectionDrag, setSelectionDrag] = useState<SelectionDragState | null>(
+      null,
+    );
 
     const updateCurrentPoints = useCallback(
       (updater: Point[] | ((prev: Point[]) => Point[])) => {
@@ -229,9 +260,12 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
 
     useEffect(() => {
       activeToolRef.current = activeTool;
-      if (activeTool === 'eraser') {
+      if (activeTool === 'eraser' || activeTool === 'select') {
         cancelCurrentStroke();
       }
+      // Clear in-progress selection drag when switching tools
+      selectionDragRef.current = null;
+      setSelectionDrag(null);
     }, [activeTool, cancelCurrentStroke]);
 
     useEffect(() => {
@@ -342,6 +376,50 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       }
     }, []);
 
+    const handleSelectionStart = useCallback(
+      (point: Point) => {
+        // Clear any existing finalized selection when starting new drag
+        onSelectionChange?.(null);
+        const dragState: SelectionDragState = {
+          startX: point.x,
+          startY: point.y,
+          currentX: point.x,
+          currentY: point.y,
+        };
+        selectionDragRef.current = dragState;
+        setSelectionDrag(dragState);
+      },
+      [onSelectionChange],
+    );
+
+    const handleSelectionMove = useCallback((point: Point) => {
+      const drag = selectionDragRef.current;
+      if (!drag) {
+        return;
+      }
+      const newDrag: SelectionDragState = {
+        ...drag,
+        currentX: point.x,
+        currentY: point.y,
+      };
+      selectionDragRef.current = newDrag;
+      setSelectionDrag(newDrag);
+    }, []);
+
+    const handleSelectionEnd = useCallback(() => {
+      const drag = selectionDragRef.current;
+      if (!drag) {
+        return;
+      }
+      const rect = normalizeToRect(drag);
+      // Only finalize if selection is large enough
+      if (rect.width >= MIN_SELECTION_SIZE && rect.height >= MIN_SELECTION_SIZE) {
+        onSelectionChange?.(rect);
+      }
+      selectionDragRef.current = null;
+      setSelectionDrag(null);
+    }, [onSelectionChange]);
+
     const panResponder = useMemo(
       () =>
         PanResponder.create({
@@ -357,8 +435,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
             };
             if (activeToolRef.current === 'pen') {
               handlePenStart(point);
-            } else {
+            } else if (activeToolRef.current === 'eraser') {
               handleEraserStart(point);
+            } else if (activeToolRef.current === 'select') {
+              handleSelectionStart(point);
             }
           },
           onPanResponderMove: event => {
@@ -371,8 +451,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
             };
             if (activeToolRef.current === 'pen') {
               handlePenMove(point);
-            } else {
+            } else if (activeToolRef.current === 'eraser') {
               handleEraserMove(point);
+            } else if (activeToolRef.current === 'select') {
+              handleSelectionMove(point);
             }
           },
           onPanResponderRelease: event => {
@@ -385,8 +467,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
             };
             if (activeToolRef.current === 'pen') {
               handlePenEnd();
-            } else {
+            } else if (activeToolRef.current === 'eraser') {
               handleEraserEnd(point);
+            } else if (activeToolRef.current === 'select') {
+              handleSelectionEnd();
             }
           },
           onPanResponderTerminate: () => {
@@ -400,6 +484,9 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
         handleEraserStart,
         handleEraserMove,
         handleEraserEnd,
+        handleSelectionStart,
+        handleSelectionMove,
+        handleSelectionEnd,
         cancelCurrentStroke,
       ],
     );
@@ -419,6 +506,14 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       () => buildPath(currentPoints),
       [currentPoints],
     );
+
+    // Compute the selection rect to render (active drag takes priority over finalized)
+    const selectionRectToRender = useMemo(() => {
+      if (selectionDrag) {
+        return normalizeToRect(selectionDrag);
+      }
+      return selectionRect ?? null;
+    }, [selectionDrag, selectionRect]);
 
     return (
       <View style={styles.container} {...panResponder.panHandlers}>
@@ -443,6 +538,26 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
               strokeJoin="round"
               strokeCap="round"
             />
+          ) : null}
+          {selectionRectToRender ? (
+            <>
+              <Rect
+                x={selectionRectToRender.x}
+                y={selectionRectToRender.y}
+                width={selectionRectToRender.width}
+                height={selectionRectToRender.height}
+                color="rgba(30, 144, 255, 0.15)"
+              />
+              <Rect
+                x={selectionRectToRender.x}
+                y={selectionRectToRender.y}
+                width={selectionRectToRender.width}
+                height={selectionRectToRender.height}
+                color="#1E90FF"
+                style="stroke"
+                strokeWidth={2}
+              />
+            </>
           ) : null}
         </Canvas>
       </View>

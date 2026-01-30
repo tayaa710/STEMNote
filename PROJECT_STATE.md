@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
-**Last Updated:** 2026-01-29
-**Current Task:** Task 8 Complete
-**Status:** ✅ PNG export implemented (full-page render, persisted to Documents/exports)
+**Last Updated:** 2026-01-30
+**Current Task:** Task 9 Complete
+**Status:** ✅ Selection mode + region export implemented
 
 ---
 
@@ -399,6 +399,65 @@ src/
 
 ---
 
+### Task 9: Selection Mode + Region Export ✅
+**Goal:** Add selection mode and export only the selected region to PNG.
+
+**Key Decisions:**
+- **Selection UX:** Rectangle selection via drag (any direction supported)
+- **Tool Toggle:** Added "Select" button to DrawingToolbar alongside Pen/Eraser
+- **Overlay:** Blue border (#1E90FF) + light blue fill (15% opacity)
+- **Minimum Size:** 5×5 pixel threshold to avoid accidental tiny selections
+- **Region Export:** Reused Skia offscreen rendering with coordinate transforms
+
+**Data Model:**
+```typescript
+interface SelectionRect {
+  x: number;      // top-left x (logical canvas coords)
+  y: number;      // top-left y (logical canvas coords)
+  width: number;  // always positive (normalized)
+  height: number; // always positive (normalized)
+}
+
+type DrawingTool = 'pen' | 'eraser' | 'select';
+```
+
+**Implementation Details:**
+- Selection state lifted to PageEditorScreen (not internal to DrawingCanvas)
+- DrawingCanvas handles overlay rendering and drag input, calls `onSelectionChange`
+- `renderRegionToPngBase64()` added to exportDrawing.ts for region cropping
+- Auto-clear selection when switching tools or changing pages
+- Export clears selection on success
+
+**Files Modified:**
+- `src/types/models.ts` - Added `SelectionRect`, extended `DrawingTool`
+- `src/components/DrawingCanvas.tsx` - Selection overlay + input handling
+- `src/components/DrawingToolbar.tsx` - Select button + Clear Sel / Export Sel buttons
+- `src/screens/PageEditorScreen.tsx` - Selection state + `handleExportSelection`
+- `src/utils/exportDrawing.ts` - Added `renderRegionToPngBase64()`
+
+**Dependencies Added:**
+- None (used existing @shopify/react-native-skia and react-native-fs)
+
+**Manual Testing:**
+- ✅ Select tool toggles correctly
+- ✅ Drawing disabled in select mode
+- ✅ Rectangle drag works in all directions (reverse drag normalized)
+- ✅ Selection overlay visible (border + fill)
+- ✅ Clear Selection clears overlay
+- ✅ Export Selection produces correct region PNG
+- ✅ Exported PNG matches visual selection
+- ✅ File saved with `_region_` in filename
+- ✅ Selection clears on tool/page change
+- ✅ No TypeScript errors
+- ✅ iOS build succeeds
+
+**Result:**
+- Selection mode works with rectangle selection
+- Region export saves cropped PNG to Documents/exports
+- Filename format: `note_${noteId}_page_${pageIndex+1}_region_${timestamp}.png`
+
+---
+
 ## Current App Structure
 
 ```
@@ -567,49 +626,50 @@ bad option: --windowKey=...
 
 ## Next Steps
 
-### Task 9: Selection Mode + Region Export (Planning Only)
+### Task 10: AskSheet UI (Planning Only)
 
 **Goal:**
-Add selection mode to export a user-selected region to PNG.
+Add UI panel with question input and answer view (mocked backend for now).
 
 **Requirements:**
-- Selection mode toggle in PageEditorScreen
-- User can lasso or drag a region (simple rectangular selection acceptable)
-- Export only the selected region to PNG
-- Output matches the selected area visually
-- Provide success/error feedback and saved file location
+- Panel/modal UI for asking questions about current region/page
+- User can type a question in a text input
+- Display a mocked answer with citations UI
+- Citations should show page references (mocked data)
+- Panel can be opened from selection mode or page context
 
 **Constraints:**
-- No AI integration yet (Task 10+)
+- No AI backend yet (mock the response)
 - Keep dependencies minimal
-- Reuse existing drawing data and export pipeline where possible
+- UI should be iPad-friendly (large touch targets, readable text)
+- Reuse existing design patterns from the app
 
-**Prompt for Task 9 Planning:**
+**Prompt for Task 10 Planning:**
 
 ```
-Proceed to Task 9, planning only.
+Proceed to Task 10, planning only.
 
-Task 9 goal:
-Add selection mode and export the selected region to PNG.
+Task 10 goal:
+Add AskSheet UI panel with question input and answer view (mocked backend for now).
 
 Requirements:
-- Add a selection mode toggle in PageEditorScreen
-- Allow the user to select a region (rectangular selection is OK for MVP)
-- Export only the selected region to a PNG
-- Output should visually match the selected area
-- Save PNG to device storage with deterministic naming
-- Provide user feedback (success/error + file location)
+- Add a panel/modal UI for asking questions about the current region/page
+- User can type a question in a text input
+- Display a mocked answer with citations UI
+- Citations should show page references (mocked data)
+- Panel can be opened from selection mode or page context
 
 Constraints:
-- No AI integration yet
-- Keep dependencies minimal; justify any new libraries
-- Reuse existing drawing data and export utilities where possible
+- No AI backend yet (mock the response)
+- Keep dependencies minimal
+- UI should be iPad-friendly (large touch targets, readable text)
+- Reuse existing design patterns from the app
 
 For the plan include:
-1) Selection interaction/UX (how to draw/adjust selection)
-2) Rendering/cropping approach for region export
-3) File system location and naming
-4) UI changes
+1) UI/UX design (how the panel opens, layout, dismiss behavior)
+2) Question input and submit flow
+3) Answer display with citations UI
+4) Mock data structure for responses
 5) Files to create/modify
 6) Definition of done
 7) Manual test checklist

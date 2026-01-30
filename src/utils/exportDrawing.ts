@@ -5,7 +5,7 @@ import {
   StrokeCap,
   StrokeJoin,
 } from '@shopify/react-native-skia';
-import { DrawingData, Point, Stroke } from '../types/models';
+import { DrawingData, Point, SelectionRect, Stroke } from '../types/models';
 
 export type ExportSize = { width: number; height: number };
 
@@ -90,6 +90,76 @@ export function renderDrawingToPngBase64(
   const base64 = image.encodeToBase64(ImageFormat.PNG, 100);
   if (!base64) {
     throw new Error('Failed to encode PNG image.');
+  }
+  return base64;
+}
+
+const MAX_REGION_OUTPUT_DIM = 2048;
+
+export function renderRegionToPngBase64(
+  drawingData: DrawingData,
+  logicalSize: ExportSize,
+  selection: SelectionRect,
+): string {
+  if (selection.width <= 0 || selection.height <= 0) {
+    throw new Error('Invalid selection rectangle.');
+  }
+
+  // Calculate output dimensions preserving aspect ratio, capped at MAX_REGION_OUTPUT_DIM
+  const aspectRatio = selection.width / selection.height;
+  let outputWidth: number;
+  let outputHeight: number;
+
+  if (aspectRatio >= 1) {
+    // Landscape or square: cap width
+    outputWidth = Math.min(MAX_REGION_OUTPUT_DIM, Math.round(selection.width * 4));
+    outputHeight = Math.round(outputWidth / aspectRatio);
+  } else {
+    // Portrait: cap height
+    outputHeight = Math.min(MAX_REGION_OUTPUT_DIM, Math.round(selection.height * 4));
+    outputWidth = Math.round(outputHeight * aspectRatio);
+  }
+
+  // Ensure minimum size
+  outputWidth = Math.max(outputWidth, 100);
+  outputHeight = Math.max(outputHeight, 100);
+
+  const surface = Skia.Surface.Make(outputWidth, outputHeight);
+  if (!surface) {
+    throw new Error('Failed to create Skia surface for region export.');
+  }
+
+  const canvas = surface.getCanvas();
+  canvas.clear(Skia.Color(BACKGROUND_COLOR));
+
+  // Calculate scale to map selection region to output
+  const scale = Math.min(outputWidth / selection.width, outputHeight / selection.height);
+
+  // Center the content in output
+  const offsetX = (outputWidth - selection.width * scale) / 2;
+  const offsetY = (outputHeight - selection.height * scale) / 2;
+
+  canvas.save();
+  canvas.translate(offsetX, offsetY);
+  canvas.scale(scale, scale);
+  // Translate to make selection.x, selection.y the origin
+  canvas.translate(-selection.x, -selection.y);
+
+  // Draw all strokes
+  drawingData.strokes.forEach(stroke => {
+    if (stroke.points.length === 0) {
+      return;
+    }
+    const { path, paint } = drawStroke(stroke);
+    canvas.drawPath(path, paint);
+  });
+
+  canvas.restore();
+
+  const image = surface.makeImageSnapshot();
+  const base64 = image.encodeToBase64(ImageFormat.PNG, 100);
+  if (!base64) {
+    throw new Error('Failed to encode PNG image for region.');
   }
   return base64;
 }

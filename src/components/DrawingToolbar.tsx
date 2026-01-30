@@ -19,6 +19,9 @@ interface DrawingToolbarProps {
   canRedo: boolean;
   saving?: boolean;
   loading?: boolean;
+  hasSelection?: boolean;
+  onClearSelection?: () => void;
+  onExportSelection?: () => void;
 }
 
 const DrawingToolbar = ({
@@ -31,6 +34,9 @@ const DrawingToolbar = ({
   canRedo,
   saving = false,
   loading = false,
+  hasSelection = false,
+  onClearSelection,
+  onExportSelection,
 }: DrawingToolbarProps) => {
   const handleClear = () => {
     Alert.alert(
@@ -78,7 +84,40 @@ const DrawingToolbar = ({
             Eraser
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.toolButton,
+            activeTool === 'select' && styles.toolButtonActive,
+          ]}
+          onPress={() => onToolChange('select')}
+        >
+          <Text
+            style={[
+              styles.toolButtonText,
+              activeTool === 'select' && styles.toolButtonTextActive,
+            ]}
+          >
+            Select
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {hasSelection && (
+        <View style={styles.group}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={onClearSelection}
+          >
+            <Text style={styles.actionButtonText}>Clear Sel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.exportSelectionButton}
+            onPress={onExportSelection}
+          >
+            <Text style={styles.actionButtonText}>Export Sel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.group}>
         <TouchableOpacity
@@ -181,6 +220,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: '#ff3b30',
+  },
+  exportSelectionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#34C759',
   },
   clearButtonText: {
     color: '#fff',

@@ -21,7 +21,14 @@ export interface Page {
   updatedAt: number;
 }
 
-export type DrawingTool = 'pen' | 'eraser';
+export type DrawingTool = 'pen' | 'eraser' | 'select';
+
+export interface SelectionRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface DrawingData {
   version: number;

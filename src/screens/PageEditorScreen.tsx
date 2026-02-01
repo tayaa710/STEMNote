@@ -29,6 +29,7 @@ import {
   renderDrawingToPngBase64,
   renderRegionToPngBase64,
 } from '../utils/exportDrawing';
+import {checkHealth} from '../ai/apiClient';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PageEditor'>;
 
@@ -52,6 +53,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
   const [askSheetVisible, setAskSheetVisible] = useState(false);
+  const [testingBackend, setTestingBackend] = useState(false);
 
   // Track last processed pageIndex to avoid setParams loops
   const lastProcessedIndex = useRef<number | null>(null);
@@ -397,6 +399,24 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
     }
   };
 
+  // Debug: Test backend connectivity (dev only)
+  const handleTestBackend = async () => {
+    setTestingBackend(true);
+    try {
+      const result = await checkHealth();
+      if (result.ok) {
+        Alert.alert(
+          'Backend OK',
+          `Time: ${result.data.time}\nVersion: ${result.data.version}`,
+        );
+      } else {
+        Alert.alert('Backend Error', `${result.code}: ${result.error}`);
+      }
+    } finally {
+      setTestingBackend(false);
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
@@ -444,6 +464,20 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
               <Text style={styles.exportButtonText}>Export PNG</Text>
             )}
           </TouchableOpacity>
+          {__DEV__ && (
+            <TouchableOpacity
+              style={[
+                styles.testButton,
+                testingBackend && styles.testButtonDisabled,
+              ]}
+              onPress={handleTestBackend}
+              disabled={testingBackend}
+            >
+              <Text style={styles.testButtonText}>
+                {testingBackend ? 'Testing...' : 'Test'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -587,6 +621,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#c7c7cc',
   },
   exportButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  testButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#9C27B0',
+    borderRadius: 8,
+    marginLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  testButtonDisabled: {
+    opacity: 0.6,
+  },
+  testButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',

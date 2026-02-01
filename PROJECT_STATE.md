@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
-**Last Updated:** 2026-01-31
-**Current Task:** Task 10 Complete
-**Status:** ✅ AskSheet UI with mocked backend implemented
+**Last Updated:** 2026-02-01
+**Current Task:** Task 11 Complete
+**Status:** ✅ Supabase wiring + health check endpoint + Test button
 
 ---
 
@@ -523,6 +523,110 @@ interface Citation {
 
 ---
 
+### Task 11: Supabase Wiring + Backend Skeleton ✅
+**Goal:** Add minimal Supabase wiring so the app can call Supabase Edge Functions.
+
+**Key Decisions:**
+- **Environment Variables:** `react-native-config` for build-time env injection
+- **API Client Pattern:** Discriminated union responses (`ApiResponse<T>`) - no throwing
+- **Error Handling:** Network, HTTP, Parse, and Config errors with typed codes
+- **Debug UI:** Test button visible only in dev mode (`__DEV__`)
+- **Edge Function:** Minimal `health` endpoint returning `{ok, time, version}`
+
+**Data Model:**
+```typescript
+// API Response types (discriminated union)
+interface ApiResult<T> { ok: true; data: T; }
+interface ApiError { ok: false; error: string; code: ErrorCode; status?: number; }
+type ApiResponse<T> = ApiResult<T> | ApiError;
+
+// Health response
+interface HealthResponse { ok: boolean; time: string; version: string; }
+```
+
+**Local Supabase URL Rules (IMPORTANT):**
+| Environment | SUPABASE_URL | Notes |
+|-------------|--------------|-------|
+| iOS Simulator | `http://localhost:54321` | Simulator shares Mac's localhost |
+| Physical iOS Device | `http://<Mac-LAN-IP>:54321` | Must be on same Wi-Fi |
+| Android Emulator | `http://10.0.2.2:54321` | Special alias for host machine |
+| Physical Android | `http://<Mac-LAN-IP>:54321` | Must be on same Wi-Fi |
+| Production | `https://<project-ref>.supabase.co` | Deployed Supabase project |
+
+**How to find Mac's LAN IP:**
+```bash
+ipconfig getifaddr en0
+# Example: 192.168.1.42
+```
+
+**Files Created:**
+- `src/ai/apiClient.ts` - Typed Supabase Edge Function client
+- `src/types/env.d.ts` - TypeScript declarations for react-native-config
+- `.env.example` - Template with URL configuration examples
+- `supabase/functions/health/index.ts` - Health check Edge Function
+
+**Files Modified:**
+- `.gitignore` - Added `.env*` patterns (excluding `.env.example`)
+- `src/screens/PageEditorScreen.tsx` - Added purple "Test" button (dev only)
+- `package.json` - Added `react-native-config` dependency
+
+**Dependencies Added:**
+- `react-native-config` ^1.6.1 (build-time env variables)
+
+**API Client Functions:**
+- `checkHealth()` - Test backend connectivity
+- `askRegion(request)` - (stub) Ask question about selected region
+- `indexPage(request)` - (stub) Index page for RAG
+- `indexPdf(request)` - (stub) Index PDF for RAG
+
+**Manual Testing Checklist:**
+1. **Supabase Local:**
+   ```bash
+   supabase start
+   supabase functions serve --no-verify-jwt  # Required for local dev
+   curl -X POST http://localhost:54321/functions/v1/health \
+     -H "Authorization: Bearer <anon-key>" \
+     -H "Content-Type: application/json"
+   # Expected: {"ok":true,"time":"...","version":"1.0.0"}
+   ```
+
+   **Note:** Use `--no-verify-jwt` for local development. Newer Supabase CLI uses ES256 keys locally which causes JWT verification errors without this flag.
+
+2. **iOS Simulator + Local Supabase:**
+   - Set `.env`: `SUPABASE_URL=http://localhost:54321`
+   - Rebuild app, tap Test button
+   - Expected: Alert "Backend OK" with time/version
+
+3. **Physical Device + Local Supabase:**
+   - Get Mac LAN IP: `ipconfig getifaddr en0`
+   - Set `.env`: `SUPABASE_URL=http://<LAN-IP>:54321`
+   - Ensure device on same Wi-Fi
+   - Rebuild app, tap Test button
+   - Expected: Alert "Backend OK" with time/version
+
+4. **Config Error Test:**
+   - Remove `.env` or leave values empty
+   - Rebuild app, tap Test button
+   - Expected: Alert "CONFIG_ERROR: Supabase not configured"
+
+5. **Deployed Supabase:**
+   ```bash
+   supabase functions deploy health
+   ```
+   - Set `.env` to production URL
+   - Tap Test button
+   - Expected: Alert "Backend OK"
+
+**Result:**
+- Supabase Edge Function client with typed responses
+- Health check endpoint deployed and testable
+- Purple "Test" button in dev mode for connectivity testing
+- Environment variable handling via react-native-config
+- Local URL rules documented for simulator vs physical device
+- No AI logic yet (stubs only for future endpoints)
+
+---
+
 ## Current App Structure
 
 ```
@@ -532,8 +636,12 @@ interface Citation {
 ├── TASKS.md                     # Task definitions
 ├── PROJECT_STATE.md             # This file
 ├── package.json                 # Dependencies
+├── .env.example                 # ✅ Environment variable template
+├── .env                         # Environment variables (gitignored)
 ├── App.tsx                      # App entry point
 ├── src/
+│   ├── ai/
+│   │   └── apiClient.ts         # ✅ Supabase Edge Function client
 │   ├── components/
 │   │   ├── DrawingCanvas.tsx     # ✅ Skia drawing canvas
 │   │   ├── DrawingToolbar.tsx    # ✅ Drawing tools/actions
@@ -543,7 +651,7 @@ interface Citation {
 │   ├── screens/
 │   │   ├── FolderListScreen.tsx # ✅ Folder CRUD (working)
 │   │   ├── NoteListScreen.tsx   # ✅ Note CRUD (working)
-│   │   └── PageEditorScreen.tsx # ✅ Page navigation + drawing + Ask
+│   │   └── PageEditorScreen.tsx # ✅ Page navigation + drawing + Ask + Test
 │   ├── storage/
 │   │   ├── folders.ts           # ✅ Folder AsyncStorage CRUD
 │   │   ├── notes.ts             # ✅ Note AsyncStorage CRUD
@@ -554,7 +662,12 @@ interface Citation {
 │   └── types/
 │       ├── models.ts            # ✅ Data models (Folder, Note, Page, Drawing)
 │       ├── navigation.ts        # ✅ Route types
-│       └── ai.ts                # ✅ AI types (Citation)
+│       ├── ai.ts                # ✅ AI types (Citation)
+│       └── env.d.ts             # ✅ Environment variable types
+├── supabase/
+│   └── functions/
+│       └── health/
+│           └── index.ts         # ✅ Health check Edge Function
 ├── ios/                         # Native iOS project
 └── android/                     # Native Android project
 ```
@@ -628,14 +741,15 @@ npm run lint
 - `uuid` ^13.0.0
 - `react-native-get-random-values` ^2.0.0
 - `react-native-fs` ^2.20.0
+- `react-native-config` ^1.6.1
 
 ### Development
 - `typescript` ^5.8.3
 - `@types/uuid` ^10.0.0
 - (plus standard RN dev dependencies)
 
-**Total npm packages:** 881
-**Total CocoaPods:** 84 dependencies, 83 pods
+**Total npm packages:** 898
+**Total CocoaPods:** 86 dependencies, 85 pods
 
 ---
 
@@ -693,23 +807,42 @@ bad option: --windowKey=...
 
 ---
 
+### Local Supabase JWT Verification Error (Task 11)
+**Issue:** `supabase functions serve` fails with ES256 key type error when verifying JWTs.
+
+**Symptoms:**
+```
+TypeError: Key for the ES256 algorithm must be of type CryptoKey. Received an instance of Uint8Array
+```
+
+**Cause:** Newer Supabase CLI uses ES256 keys (`sb_publishable_*`) locally instead of HS256 JWTs. The local runtime has compatibility issues verifying these keys.
+
+**Workaround:**
+```bash
+supabase functions serve --no-verify-jwt
+```
+
+**Note:** This only affects local development. Production deployments work correctly with standard JWT verification.
+
+---
+
 ## Next Steps
 
-### Task 11: Supabase Integration + Backend Setup
+### Task 12: AI Integration (askRegion endpoint)
 
 **Goal:**
-Set up Supabase project and integrate authentication + database for notes/drawings sync.
+Implement the askRegion Edge Function to answer questions about selected page regions.
 
 **Requirements:**
-- Supabase project with authentication
-- Database schema for folders, notes, pages, drawings
-- Row-level security policies
-- Migration from local-only AsyncStorage to cloud sync
+- Edge Function that accepts region image + question
+- Integration with AI model (Claude/OpenAI)
+- Return structured response with answer and citations
+- Connect AskSheet UI to real backend (replace mock)
 
 **Constraints:**
-- Preserve local-first approach (offline capable)
-- Maintain existing UI/UX
-- Add minimal dependencies
+- API keys stored as Supabase secrets (not in client)
+- Maintain existing AskSheet UI/UX
+- Handle rate limits and errors gracefully
 
 ---
 

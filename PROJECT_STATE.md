@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
-**Last Updated:** 2026-01-30
-**Current Task:** Task 9 Complete
-**Status:** ✅ Selection mode + region export implemented
+**Last Updated:** 2026-01-31
+**Current Task:** Task 10 Complete
+**Status:** ✅ AskSheet UI with mocked backend implemented
 
 ---
 
@@ -458,6 +458,71 @@ type DrawingTool = 'pen' | 'eraser' | 'select';
 
 ---
 
+### Task 10: AskSheet UI with Mocked Backend ✅
+**Goal:** Implement UI panel for asking questions about the current page with mocked AI responses.
+
+**Key Decisions:**
+- **UX Pattern:** Slide-up bottom panel (not modal) for iPad-friendly keyboard handling
+- **Animation:** React Native Animated API with spring animation (no new dependencies)
+- **Keyboard Handling:** Modal + KeyboardAvoidingView for reliable iPad keyboard positioning
+- **Component Structure:** Separate AskSheet.tsx component for clean separation
+- **Mock Delay:** 500-800ms to simulate realistic AI response time
+- **Citations:** Mock page references with title, snippet, and page number
+
+**Data Model:**
+```typescript
+interface Citation {
+  id: string;
+  title: string;
+  snippet: string;
+  source: 'page' | 'external';
+  pageNumber?: number;
+}
+```
+
+**Implementation Details:**
+- AskSheet component with question input, submit button, loading state, answer display
+- Green "Ask" button in page info section (next to Export PNG)
+- Panel slides up from bottom with semi-transparent backdrop
+- Tap outside or X button to dismiss
+- State persists when reopening (until question cleared)
+- Character limit: 500 chars with counter
+- Mock answer templates with realistic multi-sentence responses
+- Citations display with blue left border and gray background
+
+**Files Created:**
+- `src/types/ai.ts` - Citation interface
+- `src/components/AskSheet.tsx` - AskSheet component (~400 lines)
+
+**Files Modified:**
+- `src/screens/PageEditorScreen.tsx` - Added Ask button, state, and AskSheet render
+
+**Dependencies Added:**
+- None (used existing React Native Animated, Modal, KeyboardAvoidingView)
+
+**Manual Testing:**
+- Manual testing required in Xcode/Simulator (CLI build unavailable)
+- TypeScript compilation: ✅ PASSED (0 errors)
+- Build readiness: ✅ Code ready for iOS build
+
+**Test Checklist:**
+- Basic flow: Open → Type → Submit → Loading → Answer + Citations
+- State: Clear question resets, reopen preserves state
+- Keyboard: Panel adjusts above iPad keyboard
+- Edge cases: Empty submit disabled, 500 char limit, orientation changes
+- Integration: Drawing/export unchanged, panel doesn't interfere
+
+**Result:**
+- AskSheet UI fully implemented with mocked backend
+- Green "Ask" button in PageEditorScreen
+- Smooth slide-up animation with backdrop
+- Realistic mock responses with citations
+- iPad keyboard handling with KeyboardAvoidingView
+- Zero new dependencies
+- TypeScript compilation successful
+
+---
+
 ## Current App Structure
 
 ```
@@ -471,21 +536,25 @@ type DrawingTool = 'pen' | 'eraser' | 'select';
 ├── src/
 │   ├── components/
 │   │   ├── DrawingCanvas.tsx     # ✅ Skia drawing canvas
-│   │   └── DrawingToolbar.tsx    # ✅ Drawing tools/actions
+│   │   ├── DrawingToolbar.tsx    # ✅ Drawing tools/actions
+│   │   └── AskSheet.tsx          # ✅ Ask question panel with mock AI
 │   ├── navigation/
 │   │   └── AppNavigator.tsx     # Navigation stack
 │   ├── screens/
 │   │   ├── FolderListScreen.tsx # ✅ Folder CRUD (working)
 │   │   ├── NoteListScreen.tsx   # ✅ Note CRUD (working)
-│   │   └── PageEditorScreen.tsx # ✅ Page navigation + drawing
+│   │   └── PageEditorScreen.tsx # ✅ Page navigation + drawing + Ask
 │   ├── storage/
 │   │   ├── folders.ts           # ✅ Folder AsyncStorage CRUD
 │   │   ├── notes.ts             # ✅ Note AsyncStorage CRUD
 │   │   ├── pages.ts             # ✅ Page AsyncStorage CRUD
 │   │   └── drawings.ts          # ✅ Drawing AsyncStorage CRUD
+│   ├── utils/
+│   │   └── exportDrawing.ts     # ✅ PNG export utilities
 │   └── types/
 │       ├── models.ts            # ✅ Data models (Folder, Note, Page, Drawing)
-│       └── navigation.ts        # ✅ Route types
+│       ├── navigation.ts        # ✅ Route types
+│       └── ai.ts                # ✅ AI types (Citation)
 ├── ios/                         # Native iOS project
 └── android/                     # Native Android project
 ```
@@ -626,59 +695,21 @@ bad option: --windowKey=...
 
 ## Next Steps
 
-### Task 10: AskSheet UI (Planning Only)
+### Task 11: Supabase Integration + Backend Setup
 
 **Goal:**
-Add UI panel with question input and answer view (mocked backend for now).
+Set up Supabase project and integrate authentication + database for notes/drawings sync.
 
 **Requirements:**
-- Panel/modal UI for asking questions about current region/page
-- User can type a question in a text input
-- Display a mocked answer with citations UI
-- Citations should show page references (mocked data)
-- Panel can be opened from selection mode or page context
+- Supabase project with authentication
+- Database schema for folders, notes, pages, drawings
+- Row-level security policies
+- Migration from local-only AsyncStorage to cloud sync
 
 **Constraints:**
-- No AI backend yet (mock the response)
-- Keep dependencies minimal
-- UI should be iPad-friendly (large touch targets, readable text)
-- Reuse existing design patterns from the app
-
-**Prompt for Task 10 Planning:**
-
-```
-Proceed to Task 10, planning only.
-
-Task 10 goal:
-Add AskSheet UI panel with question input and answer view (mocked backend for now).
-
-Requirements:
-- Add a panel/modal UI for asking questions about the current region/page
-- User can type a question in a text input
-- Display a mocked answer with citations UI
-- Citations should show page references (mocked data)
-- Panel can be opened from selection mode or page context
-
-Constraints:
-- No AI backend yet (mock the response)
-- Keep dependencies minimal
-- UI should be iPad-friendly (large touch targets, readable text)
-- Reuse existing design patterns from the app
-
-For the plan include:
-1) UI/UX design (how the panel opens, layout, dismiss behavior)
-2) Question input and submit flow
-3) Answer display with citations UI
-4) Mock data structure for responses
-5) Files to create/modify
-6) Definition of done
-7) Manual test checklist
-
-Important:
-- Do not modify files until I explicitly approve
-
-Stop after the plan.
-```
+- Preserve local-first approach (offline capable)
+- Maintain existing UI/UX
+- Add minimal dependencies
 
 ---
 

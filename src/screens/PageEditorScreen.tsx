@@ -23,6 +23,7 @@ import {
 import { loadDrawingData, saveDrawingData } from '../storage/drawings';
 import DrawingCanvas, { DrawingCanvasHandle } from '../components/DrawingCanvas';
 import DrawingToolbar from '../components/DrawingToolbar';
+import AskSheet from '../components/AskSheet';
 import {
   getExportSizeForLogicalSize,
   renderDrawingToPngBase64,
@@ -50,6 +51,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [exporting, setExporting] = useState(false);
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
+  const [askSheetVisible, setAskSheetVisible] = useState(false);
 
   // Track last processed pageIndex to avoid setParams loops
   const lastProcessedIndex = useRef<number | null>(null);
@@ -423,6 +425,12 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
             Page {displayPageNumber} of {totalPages}
           </Text>
           <TouchableOpacity
+            style={styles.askButton}
+            onPress={() => setAskSheetVisible(true)}
+          >
+            <Text style={styles.askButtonText}>Ask</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
               styles.exportButton,
               isExportDisabled && styles.exportButtonDisabled,
@@ -503,6 +511,12 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
         </TouchableOpacity>
       </View>
       </View>
+
+      <AskSheet
+        visible={askSheetVisible}
+        onClose={() => setAskSheetVisible(false)}
+        pageId={currentPage?.id ?? ''}
+      />
     </SafeAreaView>
   );
 };
@@ -544,6 +558,21 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
     marginRight: 12,
+  },
+  askButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#34C759',
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  askButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   exportButton: {
     paddingHorizontal: 14,

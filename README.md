@@ -37,5 +37,86 @@ AI Providers:
   - Claude Code for building the repo
   - Claude API optionally for reasoning answers
 - OpenAI:
-  - embeddings for retrieval
-  - multimodal for interpreting region/page images (if needed)
+  - GPT-4o for vision-based question answering (askRegion)
+  - Embeddings for retrieval (future)
+
+## Local Development Setup
+
+### Prerequisites
+- Node.js 18+
+- Xcode (for iOS)
+- Supabase CLI (`npm install -g supabase`)
+- OpenAI API key
+
+### 1. Install dependencies
+```bash
+npm install
+cd ios && pod install && cd ..
+```
+
+### 2. Configure environment
+```bash
+# Copy and edit the app config
+cp .env.example .env
+# Edit .env with your Supabase URL
+
+# Copy and edit the Edge Functions config
+cp supabase/.env.example supabase/.env.local
+# Edit supabase/.env.local with your OPENAI_API_KEY
+```
+
+### 3. Start Supabase locally
+```bash
+supabase start
+```
+
+### 4. Start Edge Functions
+```bash
+supabase functions serve --no-verify-jwt --env-file ./supabase/.env.local
+```
+
+### 5. Run the app
+```bash
+# iOS Simulator
+npx react-native run-ios
+
+# Physical device (update .env with your Mac's IP first)
+npx react-native run-ios --device
+```
+
+## Edge Functions
+
+### askRegion
+Answers questions about selected page regions using OpenAI GPT-4o vision.
+
+**Endpoint:** `POST /functions/v1/askRegion`
+
+**Request:**
+```json
+{
+  "pageId": "string",
+  "regionImageBase64": "string",
+  "question": "string"
+}
+```
+
+**Response:**
+```json
+{
+  "answer": "string",
+  "citations": [{ "id": "string", "title": "string", "snippet": "string" }]
+}
+```
+
+### health
+Health check endpoint.
+
+**Endpoint:** `POST /functions/v1/health`
+
+**Response:**
+```json
+{
+  "ok": true,
+  "time": "2024-01-01T00:00:00.000Z",
+  "version": "1.0.0"
+}

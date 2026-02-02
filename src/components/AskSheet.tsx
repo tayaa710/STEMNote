@@ -14,64 +14,17 @@ import {
   Dimensions,
 } from 'react-native';
 import type {Citation} from '../types/ai';
+import {askRegion} from '../ai/apiClient';
+import MathText from './MathText';
 
 interface AskSheetProps {
   visible: boolean;
   onClose: () => void;
   pageId: string;
+  regionImageBase64: string | null;
 }
 
-const generateMockAnswer = (question: string): string => {
-  const templates = [
-    `Based on your notes, ${
-      question.toLowerCase().includes('what')
-        ? 'the key concept is'
-        : "here's what I found"
-    }: This appears to be related to mathematical derivations and problem-solving techniques. The fundamental approach involves breaking down complex problems into smaller, manageable steps and applying known formulas or theorems.`,
-
-    `From the content on this page: The material demonstrates a systematic approach to solving equations and understanding mathematical relationships. Key steps include identifying known variables, setting up equations, and working through algebraic manipulations to reach a solution.`,
-
-    `Let me help with that. The notes show important connections between different mathematical concepts. Understanding these relationships is crucial for building a strong foundation in the subject. The work demonstrates careful attention to detail and proper notation.`,
-  ];
-
-  return templates[Math.floor(Math.random() * templates.length)];
-};
-
-const generateMockCitations = (): Citation[] => {
-  return [
-    {
-      id: '1',
-      title: 'Current Page',
-      snippet:
-        'Mathematical notation and equations showing the step-by-step derivation...',
-      source: 'page',
-      pageNumber: 1,
-    },
-    {
-      id: '2',
-      title: 'Earlier Derivation',
-      snippet:
-        'Related concepts from previous work, including fundamental formulas...',
-      source: 'page',
-      pageNumber: 3,
-    },
-  ];
-};
-
-const mockAnswerRequest = async (
-  question: string,
-): Promise<{answer: string; citations: Citation[]}> => {
-  // Simulate network delay 500-800ms
-  const delay = 500 + Math.random() * 300;
-  await new Promise<void>(resolve => setTimeout(resolve, delay));
-
-  return {
-    answer: generateMockAnswer(question),
-    citations: generateMockCitations(),
-  };
-};
-
-const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId}) => {
+const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId, regionImageBase64}) => {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
@@ -111,22 +64,51 @@ const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId}) => {
   const handleSubmit = async () => {
     console.log('[AskSheet] Submit pressed, question length:', question.length, 'trimmed:', question.trim().length);
     const trimmedQuestion = question.trim();
-    if (!trimmedQuestion || loading) {
-      console.log('[AskSheet] Submit blocked - empty or loading');
+    if (!trimmedQuestion || loading || !regionImageBase64) {
+      console.log('[AskSheet] Submit blocked - empty question, loading, or no image');
       return;
     }
 
-    console.log('[AskSheet] Starting loading state');
+    console.log('[AskSheet] Calling askRegion API');
     setLoading(true);
+    setAnswer(null);
+    setCitations([]);
+
     try {
-      const result = await mockAnswerRequest(trimmedQuestion);
-      console.log('[AskSheet] Mock answer received, setting answer and citations');
-      setAnswer(result.answer);
-      setCitations(result.citations);
+      const result = await askRegion({
+        pageId,
+        regionImageBase64,
+        question: trimmedQuestion,
+      });
+
+      if (result.ok) {
+        console.log('[AskSheet] API success');
+        setAnswer(result.data.answer);
+        // Map API citations to component Citation type
+        setCitations(
+          result.data.citations.map(c => ({
+            id: c.id,
+            title: c.title,
+            snippet: c.snippet,
+            source: 'page' as const,
+          }))
+        );
+      } else {
+        console.error('[AskSheet] API error:', result.code, result.error);
+        // User-friendly error messages based on error code
+        let errorMessage = 'Something went wrong. Please try again.';
+        if (result.status === 429) {
+          errorMessage = 'Too many requests. Please wait a moment and try again.';
+        } else if (result.code === 'NETWORK_ERROR') {
+          errorMessage = 'Network error. Please check your connection.';
+        } else if (result.status === 504) {
+          errorMessage = 'Request timed out. Please try again.';
+        }
+        setAnswer(errorMessage);
+      }
     } catch (error) {
-      console.error('[AskSheet] Error generating mock answer:', error);
-      setAnswer('Sorry, something went wrong. Please try again.');
-      setCitations([]);
+      console.error('[AskSheet] Unexpected error:', error);
+      setAnswer('An unexpected error occurred. Please try again.');
     } finally {
       console.log('[AskSheet] Clearing loading state');
       setLoading(false);
@@ -148,7 +130,7 @@ const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId}) => {
     outputRange: [0.5, 0],
   });
 
-  const isSubmitDisabled = question.trim() === '' || loading;
+  const isSubmitDisabled = question.trim() === '' || loading || !regionImageBase64;
 
   return (
     <Modal
@@ -222,6 +204,13 @@ const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId}) => {
             )}
           </TouchableOpacity>
 
+          {/* Warning when no image */}
+          {!regionImageBase64 && !loading && (
+            <Text style={styles.noImageWarning}>
+              Unable to capture page content. Please try again.
+            </Text>
+          )}
+
           {/* Answer Section */}
           {(loading || answer) && (
             <ScrollView
@@ -238,7 +227,7 @@ const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId}) => {
                   {answer && (
                     <View style={styles.answerContainer}>
                       <Text style={styles.answerLabel}>Answer:</Text>
-                      <Text style={styles.answerText}>{answer}</Text>
+                      <MathText content={answer} />
                     </View>
                   )}
 
@@ -352,6 +341,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  noImageWarning: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#ff6b6b',
+    textAlign: 'center',
   },
   answerSection: {
     marginTop: 16,

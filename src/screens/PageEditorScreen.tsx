@@ -53,6 +53,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
   const [askSheetVisible, setAskSheetVisible] = useState(false);
+  const [askSheetImageBase64, setAskSheetImageBase64] = useState<string | null>(null);
   const [testingBackend, setTestingBackend] = useState(false);
 
   // Track last processed pageIndex to avoid setParams loops
@@ -286,6 +287,38 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
     }
   }, [exporting, selectionRect, flushSave, noteId, pageIndex]);
 
+  const handleOpenAskSheet = useCallback(() => {
+    const logicalSize = canvasSizeRef.current;
+    const latestData =
+      canvasRef.current?.getDrawingData() ??
+      drawingDataRef.current ??
+      EMPTY_DRAWING;
+
+    let imageBase64: string | null = null;
+
+    if (selectionRect && logicalSize) {
+      // Capture selected region
+      try {
+        imageBase64 = renderRegionToPngBase64(latestData, logicalSize, selectionRect);
+        console.log('[PageEditorScreen] Captured region image for Ask');
+      } catch (error) {
+        console.error('[PageEditorScreen] Failed to capture region:', error);
+      }
+    } else if (logicalSize) {
+      // Fall back to full page if no selection
+      try {
+        const outputSize = getExportSizeForLogicalSize(logicalSize);
+        imageBase64 = renderDrawingToPngBase64(latestData, logicalSize, outputSize);
+        console.log('[PageEditorScreen] Captured full page image for Ask');
+      } catch (error) {
+        console.error('[PageEditorScreen] Failed to capture page:', error);
+      }
+    }
+
+    setAskSheetImageBase64(imageBase64);
+    setAskSheetVisible(true);
+  }, [selectionRect]);
+
   useEffect(() => {
     const previousPageId = previousPageIdRef.current;
     if (previousPageId && previousPageId !== currentPage?.id) {
@@ -446,7 +479,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
           </Text>
           <TouchableOpacity
             style={styles.askButton}
-            onPress={() => setAskSheetVisible(true)}
+            onPress={handleOpenAskSheet}
           >
             <Text style={styles.askButtonText}>Ask</Text>
           </TouchableOpacity>
@@ -548,8 +581,12 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
 
       <AskSheet
         visible={askSheetVisible}
-        onClose={() => setAskSheetVisible(false)}
+        onClose={() => {
+          setAskSheetVisible(false);
+          setAskSheetImageBase64(null);
+        }}
         pageId={currentPage?.id ?? ''}
+        regionImageBase64={askSheetImageBase64}
       />
     </SafeAreaView>
   );

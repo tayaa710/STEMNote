@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
-**Last Updated:** 2026-02-01
-**Current Task:** Task 11 Complete
-**Status:** ✅ Supabase wiring + health check endpoint + Test button
+**Last Updated:** 2026-02-02
+**Current Task:** Task 12 Complete
+**Status:** ✅ AI Integration with askRegion Edge Function + LaTeX rendering
 
 ---
 
@@ -627,6 +627,76 @@ ipconfig getifaddr en0
 
 ---
 
+### Task 12: AI Integration - askRegion Edge Function ✅
+**Goal:** Implement the askRegion Edge Function and connect AskSheet to real AI backend.
+
+**Key Decisions:**
+- **AI Model:** OpenAI GPT-4o (user preference over Claude)
+- **LaTeX Rendering:** KaTeX via WebView for math expressions
+- **Edge Function Pattern:** Same CORS/error handling as health function
+- **Environment Variables:** `OPENAI_API_KEY` in `supabase/.env.local`
+
+**Data Model:**
+```typescript
+// Request
+interface AskRegionRequest {
+  pageId: string;
+  regionImageBase64: string;
+  question: string;
+}
+
+// Response
+interface AskRegionResponse {
+  answer: string;
+  citations: Array<{ id: string; title: string; snippet: string }>;
+}
+
+// Error codes: MISSING_PARAMS, IMAGE_TOO_LARGE, QUESTION_TOO_LONG,
+//              RATE_LIMITED, API_KEY_MISSING, AI_ERROR, TIMEOUT
+```
+
+**Implementation Details:**
+- Edge Function calls OpenAI GPT-4o with vision capabilities
+- System prompt tuned for STEM note analysis
+- 55s timeout (buffer for Supabase 60s limit)
+- 4MB max image size, 1000 char max question
+- Mock citations returned (real RAG deferred)
+- MathText component renders LaTeX via KaTeX CDN in WebView
+- Supports `$...$`, `$$...$$`, `\[...\]`, `\(...\)` delimiters
+
+**Files Created:**
+- `supabase/functions/askRegion/index.ts` - Edge Function with OpenAI integration
+- `supabase/functions/askRegion/deno.json` - Deno configuration
+- `supabase/.env.example` - Template for Edge Function secrets
+- `src/components/MathText.tsx` - LaTeX rendering component
+
+**Files Modified:**
+- `supabase/config.toml` - Added `[functions.askRegion]` config
+- `src/components/AskSheet.tsx` - Replaced mock with real API, added MathText
+- `src/screens/PageEditorScreen.tsx` - Capture region image on Ask button tap
+- `.env.example` - Cleaned up template
+- `README.md` - Added local dev setup and API docs
+
+**Dependencies Added:**
+- `react-native-webview` ^13.x (for MathText LaTeX rendering)
+
+**Manual Testing:**
+- ✅ Edge Function responds to curl requests
+- ✅ AskSheet calls real API successfully
+- ✅ Region capture works (selection or full page)
+- ✅ LaTeX expressions render correctly (inline and display)
+- ✅ Error handling (network, rate limit, timeout)
+- ✅ Works on iOS Simulator
+- ✅ Works on physical iOS device (with Mac IP in .env)
+
+**Result:**
+- Real AI-powered answers for handwritten STEM notes
+- LaTeX/math rendering with KaTeX
+- Full error handling with user-friendly messages
+- Works on both simulator and physical devices
+
+---
+
 ## Current App Structure
 
 ```
@@ -645,7 +715,8 @@ ipconfig getifaddr en0
 │   ├── components/
 │   │   ├── DrawingCanvas.tsx     # ✅ Skia drawing canvas
 │   │   ├── DrawingToolbar.tsx    # ✅ Drawing tools/actions
-│   │   └── AskSheet.tsx          # ✅ Ask question panel with mock AI
+│   │   ├── AskSheet.tsx          # ✅ Ask question panel with real AI
+│   │   └── MathText.tsx          # ✅ LaTeX rendering via KaTeX WebView
 │   ├── navigation/
 │   │   └── AppNavigator.tsx     # Navigation stack
 │   ├── screens/
@@ -665,9 +736,14 @@ ipconfig getifaddr en0
 │       ├── ai.ts                # ✅ AI types (Citation)
 │       └── env.d.ts             # ✅ Environment variable types
 ├── supabase/
+│   ├── .env.example             # ✅ Edge Function secrets template
+│   ├── config.toml              # ✅ Supabase local config
 │   └── functions/
-│       └── health/
-│           └── index.ts         # ✅ Health check Edge Function
+│       ├── health/
+│       │   └── index.ts         # ✅ Health check Edge Function
+│       └── askRegion/
+│           ├── index.ts         # ✅ AI question answering Edge Function
+│           └── deno.json        # ✅ Deno configuration
 ├── ios/                         # Native iOS project
 └── android/                     # Native Android project
 ```
@@ -742,14 +818,15 @@ npm run lint
 - `react-native-get-random-values` ^2.0.0
 - `react-native-fs` ^2.20.0
 - `react-native-config` ^1.6.1
+- `react-native-webview` ^13.x (for LaTeX rendering)
 
 ### Development
 - `typescript` ^5.8.3
 - `@types/uuid` ^10.0.0
 - (plus standard RN dev dependencies)
 
-**Total npm packages:** 898
-**Total CocoaPods:** 86 dependencies, 85 pods
+**Total npm packages:** 899
+**Total CocoaPods:** 87 dependencies, 86 pods
 
 ---
 
@@ -828,21 +905,32 @@ supabase functions serve --no-verify-jwt
 
 ## Next Steps
 
-### Task 12: AI Integration (askRegion endpoint)
+### Task 13: Page Indexing (indexPage endpoint)
 
 **Goal:**
-Implement the askRegion Edge Function to answer questions about selected page regions.
+Implement the indexPage Edge Function to extract and index text from page images for RAG.
 
 **Requirements:**
-- Edge Function that accepts region image + question
-- Integration with AI model (Claude/OpenAI)
-- Return structured response with answer and citations
-- Connect AskSheet UI to real backend (replace mock)
+- Edge Function that accepts page image
+- OCR/text extraction (OpenAI vision or dedicated OCR)
+- Chunking and embedding generation
+- Store chunks in Supabase Postgres with vectors
 
 **Constraints:**
 - API keys stored as Supabase secrets (not in client)
-- Maintain existing AskSheet UI/UX
-- Handle rate limits and errors gracefully
+- Efficient chunking for retrieval
+- Handle large pages gracefully
+
+### Task 14: RAG-Powered Answers
+
+**Goal:**
+Enhance askRegion to retrieve relevant context from indexed pages.
+
+**Requirements:**
+- Vector similarity search across folder's indexed pages
+- Include retrieved chunks in AI prompt
+- Return real citations (not mock)
+- Maintain reasonable response times
 
 ---
 
@@ -925,7 +1013,9 @@ xcrun simctl list devices | grep -i ipad
 - Task 4: ~390 lines (NoteListScreen + note storage + Note model)
 - Task 6: ~395 lines (PageEditorScreen + page storage + Page model)
 - Task 7: ~700 lines (DrawingCanvas + toolbar + drawing storage + PageEditor updates)
-- **Total:** ~2,000 lines of application code
+- Task 10-11: ~600 lines (AskSheet + apiClient + health function)
+- Task 12: ~400 lines (askRegion function + MathText + AskSheet updates)
+- **Total:** ~3,000 lines of application code
 
 **Build Time:**
 - Clean build: ~3-4 minutes
@@ -944,6 +1034,9 @@ xcrun simctl list devices | grep -i ipad
 - **React Native:** https://reactnative.dev/
 - **React Navigation:** https://reactnavigation.org/
 - **AsyncStorage:** https://react-native-async-storage.github.io/async-storage/
+- **Supabase Edge Functions:** https://supabase.com/docs/guides/functions
+- **OpenAI Vision API:** https://platform.openai.com/docs/guides/vision
+- **KaTeX:** https://katex.org/
 
 ---
 

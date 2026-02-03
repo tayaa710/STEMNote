@@ -399,3 +399,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/askRegion/deno.json"
 entrypoint = "./functions/askRegion/index.ts"
+
+[functions.indexPage]
+enabled = true
+verify_jwt = true
+import_map = "./functions/indexPage/deno.json"
+entrypoint = "./functions/indexPage/index.ts"

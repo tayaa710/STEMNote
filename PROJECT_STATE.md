@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
-**Last Updated:** 2026-02-02
-**Current Task:** Task 12 Complete
-**Status:** ✅ AI Integration with askRegion Edge Function + LaTeX rendering
+**Last Updated:** 2026-02-03
+**Current Task:** Task 13 Complete
+**Status:** ✅ Page Indexing Pipeline with RAG + Change Detection
 
 ---
 
@@ -697,6 +697,92 @@ interface AskRegionResponse {
 
 ---
 
+### Task 13: Page Indexing Pipeline ✅
+**Goal:** Implement page indexing for RAG retrieval with text extraction, chunking, and embeddings.
+
+**Key Decisions:**
+- **Manual indexing:** "Index Note" button to control costs (no auto-indexing)
+- **Text extraction:** GPT-4o Vision with STEM-focused prompt
+- **Chunking:** ~250 tokens per chunk with 50-token overlap
+- **Embeddings:** OpenAI text-embedding-3-small (1536 dimensions)
+- **Storage:** PostgreSQL with pgvector extension
+- **Change detection:** Content hash to skip unchanged pages
+
+**Data Model:**
+```typescript
+// Page model extended with indexing fields
+interface Page {
+  // ... existing fields
+  indexStatus: IndexStatus;      // 'none' | 'queued' | 'running' | 'done' | 'error'
+  indexedAt: number | null;      // Timestamp of last successful index
+  indexError: string | null;     // Error message if failed
+  lastIndexedHash: string | null; // Content hash for change detection
+}
+```
+
+```sql
+-- Database schema for chunks
+CREATE TABLE chunks (
+  id UUID PRIMARY KEY,
+  folder_id TEXT NOT NULL,
+  source_type TEXT NOT NULL,  -- 'page' or 'pdf'
+  source_id TEXT NOT NULL,    -- pageId
+  page_index INTEGER,
+  chunk_text TEXT NOT NULL,
+  embedding VECTOR(1536),
+  metadata JSONB,
+  created_at TIMESTAMPTZ
+);
+```
+
+**Implementation Details:**
+- Edge Function extracts text → chunks it → generates embeddings → stores in DB
+- Client-side indexingService orchestrates the manual indexing flow
+- Hash computed from drawing data (stroke IDs, point samples) using djb2 algorithm
+- Pages skipped only if: hash unchanged AND within 5-minute cooldown
+- Modified pages re-indexed immediately regardless of cooldown
+- Progress UI shows "2/5" during sequential processing
+- 500ms delay between pages to avoid rate limits
+
+**Files Created:**
+- `supabase/migrations/20250203000000_create_chunks_table.sql` - Database migration
+- `supabase/functions/indexPage/index.ts` - Edge Function (~350 lines)
+- `supabase/functions/indexPage/deno.json` - Deno configuration
+- `src/ai/indexingService.ts` - Client indexing orchestration (~280 lines)
+
+**Files Modified:**
+- `src/types/models.ts` - IndexStatus type, Page indexing fields
+- `src/storage/pages.ts` - updatePageIndexStatus, getPageById functions
+- `src/ai/apiClient.ts` - IndexPageRequest/Response types
+- `src/screens/PageEditorScreen.tsx` - Index Note button, progress UI
+- `supabase/config.toml` - indexPage function config
+- `README.md` - Indexing documentation
+
+**Dependencies Added:**
+- None (uses existing packages)
+
+**Manual Testing:**
+- ✅ Index Note button shows progress "2/5"
+- ✅ Chunks appear in database after indexing
+- ✅ Empty pages skipped (marked as done)
+- ✅ Re-indexing skips unchanged pages
+- ✅ Modified pages re-indexed immediately
+- ✅ Results alert shows indexed/skipped/failed counts
+- ✅ Error handling for API failures
+
+**Cost Considerations:**
+- GPT-4o Vision: ~$0.01-0.05 per page
+- Embeddings: ~$0.0001 per page (negligible)
+- 10-page note: ~$0.10-0.50 per full index
+
+**Result:**
+- Complete page indexing pipeline for RAG
+- Manual indexing to control costs
+- Smart change detection for efficient re-indexing
+- Chunks stored with embeddings ready for similarity search
+
+---
+
 ## Current App Structure
 
 ```
@@ -711,7 +797,8 @@ interface AskRegionResponse {
 ├── App.tsx                      # App entry point
 ├── src/
 │   ├── ai/
-│   │   └── apiClient.ts         # ✅ Supabase Edge Function client
+│   │   ├── apiClient.ts         # ✅ Supabase Edge Function client
+│   │   └── indexingService.ts   # ✅ Page indexing orchestration
 │   ├── components/
 │   │   ├── DrawingCanvas.tsx     # ✅ Skia drawing canvas
 │   │   ├── DrawingToolbar.tsx    # ✅ Drawing tools/actions
@@ -738,11 +825,16 @@ interface AskRegionResponse {
 ├── supabase/
 │   ├── .env.example             # ✅ Edge Function secrets template
 │   ├── config.toml              # ✅ Supabase local config
+│   ├── migrations/
+│   │   └── 20250203000000_create_chunks_table.sql  # ✅ pgvector + chunks table
 │   └── functions/
 │       ├── health/
 │       │   └── index.ts         # ✅ Health check Edge Function
-│       └── askRegion/
-│           ├── index.ts         # ✅ AI question answering Edge Function
+│       ├── askRegion/
+│       │   ├── index.ts         # ✅ AI question answering Edge Function
+│       │   └── deno.json        # ✅ Deno configuration
+│       └── indexPage/
+│           ├── index.ts         # ✅ Page indexing Edge Function
 │           └── deno.json        # ✅ Deno configuration
 ├── ios/                         # Native iOS project
 └── android/                     # Native Android project
@@ -905,22 +997,6 @@ supabase functions serve --no-verify-jwt
 
 ## Next Steps
 
-### Task 13: Page Indexing (indexPage endpoint)
-
-**Goal:**
-Implement the indexPage Edge Function to extract and index text from page images for RAG.
-
-**Requirements:**
-- Edge Function that accepts page image
-- OCR/text extraction (OpenAI vision or dedicated OCR)
-- Chunking and embedding generation
-- Store chunks in Supabase Postgres with vectors
-
-**Constraints:**
-- API keys stored as Supabase secrets (not in client)
-- Efficient chunking for retrieval
-- Handle large pages gracefully
-
 ### Task 14: RAG-Powered Answers
 
 **Goal:**
@@ -931,6 +1007,17 @@ Enhance askRegion to retrieve relevant context from indexed pages.
 - Include retrieved chunks in AI prompt
 - Return real citations (not mock)
 - Maintain reasonable response times
+
+### Task 15: PDF Ingestion
+
+**Goal:**
+Allow users to import PDFs into folders and index them for RAG.
+
+**Requirements:**
+- PDF import UI with document picker
+- PDF text extraction (client or server-side)
+- Index PDF text using /indexPdf endpoint
+- Citations link to PDF with page number
 
 ---
 
@@ -1015,7 +1102,8 @@ xcrun simctl list devices | grep -i ipad
 - Task 7: ~700 lines (DrawingCanvas + toolbar + drawing storage + PageEditor updates)
 - Task 10-11: ~600 lines (AskSheet + apiClient + health function)
 - Task 12: ~400 lines (askRegion function + MathText + AskSheet updates)
-- **Total:** ~3,000 lines of application code
+- Task 13: ~650 lines (indexPage function + indexingService + migrations + UI updates)
+- **Total:** ~3,650 lines of application code
 
 **Build Time:**
 - Clean build: ~3-4 minutes

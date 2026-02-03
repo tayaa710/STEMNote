@@ -203,7 +203,7 @@ Environment setup required:
 - OPENAI_API_KEY in supabase/.env.local for local dev
 - Set via `supabase secrets set` for production
 
-## Task 13 — Indexing pages into chunks (server)
+## Task 13 — Indexing pages into chunks (server) ✅ DONE
 Goal:
 - Implement /indexPage pipeline to enable RAG in future tasks.
 - Extract text from page images using OCR/multimodal.
@@ -245,6 +245,41 @@ DoD:
 - After saving a page, chunks exist in database.
 - Re-indexing a page replaces old chunks.
 - Indexing status visible in UI.
+
+Implementation:
+- Database migration with pgvector extension and chunks table
+- GPT-4o extracts text from page images with STEM-focused prompt
+- Text chunked at ~250 tokens with 50-token overlap
+- Embeddings generated via OpenAI text-embedding-3-small (1536 dimensions)
+- **Manual indexing via "Index Note" button** (not auto-indexing, to control costs)
+- Sequential page processing with 500ms delays to avoid rate limits
+- **Smart change detection**: Content hash tracks drawing changes
+- Pages skipped only if: hash unchanged AND within 5-minute cooldown
+- Modified pages re-indexed immediately regardless of cooldown
+- Progress indicator shows "2/5" during indexing
+- Results alert shows indexed/skipped/failed counts
+
+Files created:
+- supabase/migrations/20250203000000_create_chunks_table.sql
+- supabase/functions/indexPage/index.ts (~350 lines)
+- supabase/functions/indexPage/deno.json
+- src/ai/indexingService.ts (~230 lines, includes indexNote function)
+
+Files modified:
+- src/types/models.ts (IndexStatus type, Page interface with indexing fields)
+- src/storage/pages.ts (updatePageIndexStatus, getPageById functions)
+- src/ai/apiClient.ts (IndexPageRequest/Response types)
+- src/screens/PageEditorScreen.tsx (Index Note button, progress UI)
+- supabase/config.toml (indexPage function config)
+- README.md (indexPage docs, database schema docs, indexing guide)
+
+New deps:
+- None (uses existing packages)
+
+Cost considerations:
+- GPT-4o Vision: ~$0.01-0.05 per page
+- Embeddings: ~$0.0001 per page (negligible)
+- Manual indexing prevents unexpected costs
 
 ## Task 14 — Folder RAG (retrieve + answer)
 Goal:

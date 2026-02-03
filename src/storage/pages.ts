@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
-import { Page } from '../types/models';
+import { Page, IndexStatus } from '../types/models';
 
 const PAGES_KEY = '@pages';
 
@@ -64,6 +64,10 @@ export async function createPage(noteId: string): Promise<Page[]> {
       pageIndex: maxIndex + 1,
       createdAt: now,
       updatedAt: now,
+      indexStatus: 'none',
+      indexedAt: null,
+      indexError: null,
+      lastIndexedHash: null,
     };
 
     const updated = [...allPages, newPage];
@@ -106,6 +110,10 @@ export async function ensurePageExists(
       pageIndex,
       createdAt: now,
       updatedAt: now,
+      indexStatus: 'none',
+      indexedAt: null,
+      indexError: null,
+      lastIndexedHash: null,
     };
 
     const updated = [...allPages, newPage];
@@ -118,5 +126,50 @@ export async function ensurePageExists(
   } catch (error) {
     console.error('Failed to ensure page exists:', error);
     throw error;
+  }
+}
+
+/**
+ * Get a single page by its ID
+ */
+export async function getPageById(pageId: string): Promise<Page | null> {
+  try {
+    const allPages = await loadAll();
+    return allPages.find(p => p.id === pageId) ?? null;
+  } catch (error) {
+    console.error('Failed to get page by id:', pageId, error);
+    return null;
+  }
+}
+
+/**
+ * Update the indexing status of a page
+ */
+export async function updatePageIndexStatus(
+  pageId: string,
+  indexStatus: IndexStatus,
+  indexedAt?: number | null,
+  indexError?: string | null,
+  lastIndexedHash?: string | null,
+): Promise<void> {
+  try {
+    const allPages = await loadAll();
+    const pageIndex = allPages.findIndex(p => p.id === pageId);
+    if (pageIndex === -1) {
+      console.warn('Page not found for index status update:', pageId);
+      return;
+    }
+
+    allPages[pageIndex] = {
+      ...allPages[pageIndex],
+      indexStatus,
+      indexedAt: indexedAt !== undefined ? indexedAt : allPages[pageIndex].indexedAt,
+      indexError: indexError !== undefined ? indexError : null,
+      lastIndexedHash: lastIndexedHash !== undefined ? lastIndexedHash : allPages[pageIndex].lastIndexedHash,
+      updatedAt: Date.now(),
+    };
+    await saveAll(allPages);
+  } catch (error) {
+    console.error('Failed to update page index status:', pageId, error);
   }
 }

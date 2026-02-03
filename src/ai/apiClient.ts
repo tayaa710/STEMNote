@@ -44,13 +44,17 @@ export interface AskRegionResponse {
 }
 
 export interface IndexPageRequest {
+  folderId: string;
+  noteId: string;
   pageId: string;
-  imageBase64: string;
+  pageIndex: number;
+  pageImageBase64: string;
 }
 
 export interface IndexPageResponse {
-  indexed: boolean;
-  pageId: string;
+  ok: boolean;
+  chunksUpserted: number;
+  extractedTextLength?: number;
 }
 
 export interface IndexPdfRequest {
@@ -174,7 +178,8 @@ export async function askRegion(
 
 /**
  * Index a page image for RAG retrieval.
- * (Stub - not yet implemented on backend)
+ * Extracts text from the page image, chunks it, generates embeddings,
+ * and stores chunks in the database for future RAG queries.
  */
 export async function indexPage(
   request: IndexPageRequest,

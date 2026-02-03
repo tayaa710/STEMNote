@@ -30,6 +30,7 @@ import {
   renderRegionToPngBase64,
 } from '../utils/exportDrawing';
 import {checkHealth} from '../ai/apiClient';
+import {indexNote, IndexNoteResult} from '../ai/indexingService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PageEditor'>;
 
@@ -55,6 +56,8 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [askSheetVisible, setAskSheetVisible] = useState(false);
   const [askSheetImageBase64, setAskSheetImageBase64] = useState<string | null>(null);
   const [testingBackend, setTestingBackend] = useState(false);
+  const [indexingNote, setIndexingNote] = useState(false);
+  const [indexProgress, setIndexProgress] = useState<{current: number; total: number} | null>(null);
 
   // Track last processed pageIndex to avoid setParams loops
   const lastProcessedIndex = useRef<number | null>(null);
@@ -432,6 +435,43 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
     }
   };
 
+  // Index all pages in the current note
+  const handleIndexNote = useCallback(async () => {
+    if (!canvasSize || pages.length === 0 || indexingNote) {
+      return;
+    }
+
+    setIndexingNote(true);
+    setIndexProgress({ current: 0, total: pages.length });
+
+    try {
+      const result = await indexNote({
+        pages,
+        folderId,
+        canvasSize,
+        onProgress: (current, total) => {
+          setIndexProgress({ current, total });
+        },
+      });
+
+      // Reload pages to get updated index status
+      const updatedPages = await loadPagesByNote(noteId);
+      setPages(updatedPages);
+
+      // Show result
+      Alert.alert(
+        'Indexing Complete',
+        `Indexed: ${result.indexedPages}\nSkipped: ${result.skippedPages}\nFailed: ${result.failedPages}`,
+      );
+    } catch (error) {
+      console.error('Failed to index note:', error);
+      Alert.alert('Indexing Error', 'Failed to index note. Please try again.');
+    } finally {
+      setIndexingNote(false);
+      setIndexProgress(null);
+    }
+  }, [canvasSize, pages, folderId, indexingNote, noteId]);
+
   // Debug: Test backend connectivity (dev only)
   const handleTestBackend = async () => {
     setTestingBackend(true);
@@ -477,6 +517,26 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
           <Text style={styles.pageInfoText}>
             Page {displayPageNumber} of {totalPages}
           </Text>
+          {/* Index Note Button */}
+          <TouchableOpacity
+            style={[
+              styles.indexButton,
+              indexingNote && styles.indexButtonDisabled,
+            ]}
+            onPress={handleIndexNote}
+            disabled={indexingNote || !canvasSize}
+          >
+            {indexingNote ? (
+              <View style={styles.indexButtonContent}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.indexButtonText}>
+                  {indexProgress ? `${indexProgress.current}/${indexProgress.total}` : 'Indexing...'}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.indexButtonText}>Index Note</Text>
+            )}
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.askButton}
             onPress={handleOpenAskSheet}
@@ -726,6 +786,29 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  indexButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#5856D6',
+    borderRadius: 8,
+    marginRight: 8,
+    minWidth: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  indexButtonDisabled: {
+    backgroundColor: '#a5a4e3',
+  },
+  indexButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  indexButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
   },
 });
 

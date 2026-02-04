@@ -1,8 +1,8 @@
 # Context Notes - Project State
 
-**Last Updated:** 2026-02-03
-**Current Task:** Task 13 Complete
-**Status:** ✅ Page Indexing Pipeline with RAG + Change Detection
+**Last Updated:** 2026-02-04
+**Current Task:** Task 14 Complete
+**Status:** ✅ RAG-Powered Answers with Real Citations
 
 ---
 
@@ -783,6 +783,89 @@ CREATE TABLE chunks (
 
 ---
 
+### Task 14: RAG-Powered Answers ✅
+**Goal:** Enhance askRegion to retrieve relevant context from indexed pages and return real citations.
+
+**Key Decisions:**
+- **Model:** Switched to gpt-4o-mini for 94% cost savings ($0.15/1M vs $2.50/1M input)
+- **Hybrid RAG:** Small folders (≤30 chunks) include ALL chunks; large folders use similarity search
+- **Similarity search:** pgvector with cosine similarity, top 12 chunks, min similarity 0.15
+- **Fallback:** Image-only analysis when no folderId or no indexed content
+- **Citations:** Tappable to navigate to source page
+- **Gesture fix:** Disabled swipe-back on PageEditorScreen to prevent interference with drawing
+
+**Data Model:**
+```typescript
+// Updated AskRegionRequest
+interface AskRegionRequest {
+  folderId: string;  // NEW: for RAG context retrieval
+  pageId: string;
+  regionImageBase64: string;
+  question: string;
+}
+
+// Updated Citation with navigation
+interface Citation {
+  id: string;
+  title: string;
+  snippet: string;
+  source: 'page' | 'region' | 'external';
+  noteId?: string;      // For navigation
+  pageIndex?: number;   // 0-based index
+}
+```
+
+**Implementation Details:**
+- Hybrid retrieval approach:
+  - Count chunks in folder first
+  - If ≤30 chunks: include ALL (no similarity filtering, no embedding call needed)
+  - If >30 chunks: embed question and use similarity search (top 12, similarity ≥0.15)
+- GPT-4o-mini instructed to cite sources using [Source N] format
+- Citations include navigation metadata (noteId, pageIndex)
+- AskSheet makes page citations tappable (blue background, chevron indicator)
+- Tapping navigates to source page (same note = setParams, different note = push)
+
+**Files Created:**
+- `supabase/migrations/20250204000000_add_match_chunks_function.sql` - Vector search function
+
+**Files Modified:**
+- `supabase/functions/askRegion/index.ts` - RAG retrieval, hybrid approach, gpt-4o-mini (~460 lines)
+- `supabase/functions/indexPage/index.ts` - Switched to gpt-4o-mini
+- `src/ai/apiClient.ts` - Updated request/response types
+- `src/types/ai.ts` - Updated Citation type
+- `src/components/AskSheet.tsx` - folderId prop, tappable citations
+- `src/screens/PageEditorScreen.tsx` - Pass folderId and navigation callback
+- `src/navigation/AppNavigator.tsx` - Disabled swipe-back gesture on PageEditor
+
+**Dependencies Added:**
+- None (uses existing packages)
+
+**Cost Comparison (per question):**
+| Model | Input Cost | Output Cost | Estimated per Question |
+|-------|------------|-------------|------------------------|
+| gpt-4o | $2.50/1M | $10.00/1M | ~$0.03 |
+| gpt-4o-mini | $0.15/1M | $0.60/1M | ~$0.002 |
+
+**Manual Testing Checklist:**
+- [x] askRegion works with no indexed pages (image-only fallback)
+- [x] askRegion retrieves relevant chunks from indexed pages
+- [x] Small folders include ALL chunks (hybrid approach)
+- [x] Citations point to real pages with correct noteId/pageIndex
+- [x] Tapping citation navigates to correct page
+- [x] Swipe-back gesture disabled on PageEditor
+- [x] No regression: existing image analysis still works
+- [x] TypeScript compiles without errors
+
+**Result:**
+- RAG-powered answers using indexed page content
+- Hybrid retrieval ensures small folders always include all content
+- Real citations with navigation to source pages
+- 94% cost reduction with gpt-4o-mini
+- Graceful fallback when no indexed content available
+- Drawing no longer interfered by swipe gestures
+
+---
+
 ## Current App Structure
 
 ```
@@ -826,7 +909,8 @@ CREATE TABLE chunks (
 │   ├── .env.example             # ✅ Edge Function secrets template
 │   ├── config.toml              # ✅ Supabase local config
 │   ├── migrations/
-│   │   └── 20250203000000_create_chunks_table.sql  # ✅ pgvector + chunks table
+│   │   ├── 20250203000000_create_chunks_table.sql  # ✅ pgvector + chunks table
+│   │   └── 20250204000000_add_match_chunks_function.sql  # ✅ Vector similarity search function
 │   └── functions/
 │       ├── health/
 │       │   └── index.ts         # ✅ Health check Edge Function
@@ -997,17 +1081,6 @@ supabase functions serve --no-verify-jwt
 
 ## Next Steps
 
-### Task 14: RAG-Powered Answers
-
-**Goal:**
-Enhance askRegion to retrieve relevant context from indexed pages.
-
-**Requirements:**
-- Vector similarity search across folder's indexed pages
-- Include retrieved chunks in AI prompt
-- Return real citations (not mock)
-- Maintain reasonable response times
-
 ### Task 15: PDF Ingestion
 
 **Goal:**
@@ -1103,7 +1176,8 @@ xcrun simctl list devices | grep -i ipad
 - Task 10-11: ~600 lines (AskSheet + apiClient + health function)
 - Task 12: ~400 lines (askRegion function + MathText + AskSheet updates)
 - Task 13: ~650 lines (indexPage function + indexingService + migrations + UI updates)
-- **Total:** ~3,650 lines of application code
+- Task 14: ~350 lines (RAG retrieval, hybrid approach, gpt-4o-mini switch, tappable citations, gesture fix)
+- **Total:** ~4,000 lines of application code
 
 **Build Time:**
 - Clean build: ~3-4 minutes

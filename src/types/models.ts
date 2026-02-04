@@ -54,3 +54,18 @@ export interface Point {
   x: number;
   y: number;
 }
+
+export type LineSpacing = 'narrow' | 'medium' | 'wide';
+
+export type PaperBackground = 'blank' | 'lined';
+
+export interface PaperSettings {
+  background: PaperBackground;
+  lineSpacing: LineSpacing;
+}
+
+export const LINE_SPACING_VALUES: Record<LineSpacing, number> = {
+  narrow: 24,
+  medium: 32,
+  wide: 48,
+};

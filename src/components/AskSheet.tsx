@@ -20,11 +20,13 @@ import MathText from './MathText';
 interface AskSheetProps {
   visible: boolean;
   onClose: () => void;
+  folderId: string;
   pageId: string;
   regionImageBase64: string | null;
+  onNavigateToPage?: (noteId: string, pageIndex: number) => void;
 }
 
-const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId, regionImageBase64}) => {
+const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, folderId, pageId, regionImageBase64, onNavigateToPage}) => {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
@@ -76,13 +78,14 @@ const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId, regionImag
 
     try {
       const result = await askRegion({
+        folderId,
         pageId,
         regionImageBase64,
         question: trimmedQuestion,
       });
 
       if (result.ok) {
-        console.log('[AskSheet] API success');
+        console.log('[AskSheet] API success, citations:', result.data.citations.length);
         setAnswer(result.data.answer);
         // Map API citations to component Citation type
         setCitations(
@@ -90,7 +93,9 @@ const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId, regionImag
             id: c.id,
             title: c.title,
             snippet: c.snippet,
-            source: 'page' as const,
+            source: c.sourceType === 'region' ? 'region' : 'page',
+            noteId: c.noteId,
+            pageIndex: c.pageIndex,
           }))
         );
       } else {
@@ -235,19 +240,38 @@ const AskSheet: React.FC<AskSheetProps> = ({visible, onClose, pageId, regionImag
                   {citations.length > 0 && (
                     <View style={styles.citationsContainer}>
                       <Text style={styles.citationsLabel}>Sources:</Text>
-                      {citations.map(citation => (
-                        <View key={citation.id} style={styles.citationItem}>
-                          <Text style={styles.citationTitle}>
-                            {citation.title}
-                            {citation.pageNumber
-                              ? ` (Page ${citation.pageNumber})`
-                              : ''}
-                          </Text>
-                          <Text style={styles.citationSnippet}>
-                            {citation.snippet}
-                          </Text>
-                        </View>
-                      ))}
+                      {citations.map(citation => {
+                        const isNavigable = citation.source === 'page' && citation.noteId && citation.pageIndex !== undefined && onNavigateToPage;
+                        const CitationWrapper = isNavigable ? TouchableOpacity : View;
+                        const wrapperProps = isNavigable
+                          ? {
+                              onPress: () => onNavigateToPage(citation.noteId!, citation.pageIndex!),
+                              activeOpacity: 0.7,
+                            }
+                          : {};
+
+                        return (
+                          <CitationWrapper
+                            key={citation.id}
+                            style={[
+                              styles.citationItem,
+                              isNavigable && styles.citationItemTappable,
+                            ]}
+                            {...wrapperProps}>
+                            <View style={styles.citationHeader}>
+                              <Text style={styles.citationTitle}>
+                                {citation.title}
+                              </Text>
+                              {isNavigable && (
+                                <Text style={styles.citationChevron}>{'>'}</Text>
+                              )}
+                            </View>
+                            <Text style={styles.citationSnippet}>
+                              {citation.snippet}
+                            </Text>
+                          </CitationWrapper>
+                        );
+                      })}
                     </View>
                   )}
                 </>
@@ -396,11 +420,27 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 6,
   },
+  citationItemTappable: {
+    backgroundColor: '#e8f4ff',
+    borderLeftColor: '#0066cc',
+  },
+  citationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   citationTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
+  },
+  citationChevron: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   citationSnippet: {
     fontSize: 13,

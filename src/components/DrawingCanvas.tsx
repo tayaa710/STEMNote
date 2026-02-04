@@ -9,11 +9,13 @@ import React, {
   useState,
 } from 'react';
 import { PanResponder, StyleSheet, View } from 'react-native';
-import { Canvas, Path, Rect, Skia } from '@shopify/react-native-skia';
+import { Canvas, Line, Path, Rect, Skia, vec } from '@shopify/react-native-skia';
 import { v4 as uuidv4 } from 'uuid';
 import {
   DrawingData,
   DrawingTool,
+  LINE_SPACING_VALUES,
+  PaperSettings,
   Point,
   SelectionRect,
   Stroke,
@@ -24,8 +26,6 @@ const DEFAULT_COLOR = '#111111';
 const DEFAULT_WIDTH = 3;
 const MIN_POINT_DISTANCE = 2;
 const MIN_POINT_DISTANCE_SQ = MIN_POINT_DISTANCE * MIN_POINT_DISTANCE;
-const ERASER_TAP_SLOP = 12;
-const ERASER_TAP_SLOP_SQ = ERASER_TAP_SLOP * ERASER_TAP_SLOP;
 const ERASER_HIT_PADDING = 12;
 const MAX_HISTORY = 20;
 const MIN_SELECTION_SIZE = 5;
@@ -206,7 +206,15 @@ interface DrawingCanvasProps {
   isInteractive?: boolean;
   selectionRect?: SelectionRect | null;
   onSelectionChange?: (rect: SelectionRect | null) => void;
+  paperSettings?: PaperSettings;
 }
+
+const DEFAULT_PAPER_SETTINGS: PaperSettings = {
+  background: 'blank',
+  lineSpacing: 'medium',
+};
+
+const LINE_COLOR = '#d0d0d0';
 
 const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
   (
@@ -219,9 +227,11 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       isInteractive = true,
       selectionRect,
       onSelectionChange,
+      paperSettings = DEFAULT_PAPER_SETTINGS,
     },
     ref,
   ) => {
+    const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
     const [state, dispatch] = useReducer(drawingReducer, {
       strokes: [],
       undoStack: [],
@@ -236,7 +246,6 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
     const isInteractiveRef = useRef(isInteractive);
     const suppressOnChangeRef = useRef(true);
     const eraserStartRef = useRef<Point | null>(null);
-    const eraserMovedRef = useRef(false);
     const selectionDragRef = useRef<SelectionDragState | null>(null);
     const [selectionDrag, setSelectionDrag] = useState<SelectionDragState | null>(
       null,
@@ -346,34 +355,30 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       dispatch({ type: 'add', stroke });
     }, [cancelCurrentStroke]);
 
-    const handleEraserStart = useCallback((point: Point) => {
-      eraserStartRef.current = point;
-      eraserMovedRef.current = false;
-    }, []);
-
-    const handleEraserMove = useCallback((point: Point) => {
-      const start = eraserStartRef.current;
-      if (!start) {
-        return;
-      }
-      if (distanceSq(start, point) > ERASER_TAP_SLOP_SQ) {
-        eraserMovedRef.current = true;
-      }
-    }, []);
-
-    const handleEraserEnd = useCallback((point: Point) => {
-      const start = eraserStartRef.current;
-      if (!start || eraserMovedRef.current) {
-        return;
-      }
+    const eraseStrokesAtPoint = useCallback((point: Point) => {
       const strokes = strokesRef.current;
+      // Erase all strokes that the eraser touches (from top to bottom)
       for (let i = strokes.length - 1; i >= 0; i -= 1) {
         const stroke = strokes[i];
         if (isPointNearStroke(point, stroke)) {
           dispatch({ type: 'erase', strokeId: stroke.id });
-          break;
         }
       }
+    }, []);
+
+    const handleEraserStart = useCallback((point: Point) => {
+      eraserStartRef.current = point;
+      // Immediately erase any strokes at the starting point
+      eraseStrokesAtPoint(point);
+    }, [eraseStrokesAtPoint]);
+
+    const handleEraserMove = useCallback((point: Point) => {
+      // Continuously erase strokes as the user drags
+      eraseStrokesAtPoint(point);
+    }, [eraseStrokesAtPoint]);
+
+    const handleEraserEnd = useCallback(() => {
+      eraserStartRef.current = null;
     }, []);
 
     const handleSelectionStart = useCallback(
@@ -461,14 +466,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
             if (!isInteractiveRef.current) {
               return;
             }
-            const point = {
-              x: event.nativeEvent.locationX,
-              y: event.nativeEvent.locationY,
-            };
             if (activeToolRef.current === 'pen') {
               handlePenEnd();
             } else if (activeToolRef.current === 'eraser') {
-              handleEraserEnd(point);
+              handleEraserEnd();
             } else if (activeToolRef.current === 'select') {
               handleSelectionEnd();
             }
@@ -515,9 +516,40 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       return selectionRect ?? null;
     }, [selectionDrag, selectionRect]);
 
+    // Compute line positions for lined paper background
+    const linePositions = useMemo(() => {
+      if (paperSettings.background !== 'lined' || !canvasSize) {
+        return [];
+      }
+      const spacing = LINE_SPACING_VALUES[paperSettings.lineSpacing];
+      const positions: number[] = [];
+      // Start from the spacing value (first line below top)
+      for (let y = spacing; y < canvasSize.height; y += spacing) {
+        positions.push(y);
+      }
+      return positions;
+    }, [paperSettings.background, paperSettings.lineSpacing, canvasSize]);
+
+    const handleCanvasLayout = useCallback((event: { nativeEvent: { layout: { width: number; height: number } } }) => {
+      const { width, height } = event.nativeEvent.layout;
+      if (width > 0 && height > 0) {
+        setCanvasSize({ width, height });
+      }
+    }, []);
+
     return (
-      <View style={styles.container} {...panResponder.panHandlers}>
+      <View style={styles.container} {...panResponder.panHandlers} onLayout={handleCanvasLayout}>
         <Canvas style={styles.canvas}>
+          {/* Render lined paper background */}
+          {canvasSize && linePositions.map((y, index) => (
+            <Line
+              key={`line-${index}`}
+              p1={vec(0, y)}
+              p2={vec(canvasSize.width, y)}
+              color={LINE_COLOR}
+              strokeWidth={1}
+            />
+          ))}
           {strokePaths.map(stroke => (
             <Path
               key={stroke.id}

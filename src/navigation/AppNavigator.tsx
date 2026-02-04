@@ -28,7 +28,10 @@ const AppNavigator = () => {
       <Stack.Screen
         name="PageEditor"
         component={PageEditorScreen}
-        options={{ title: 'Page Editor' }}
+        options={{
+          title: 'Page Editor',
+          gestureEnabled: false, // Disable swipe-back to prevent interference with drawing
+        }}
       />
     </Stack.Navigator>
   );

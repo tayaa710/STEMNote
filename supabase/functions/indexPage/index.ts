@@ -87,7 +87,7 @@ function successResponse(data: IndexPageResponse): Response {
   });
 }
 
-// Helper: Extract text from image using GPT-4o
+// Helper: Extract text from image using GPT-4o-mini
 async function extractTextFromImage(
   apiKey: string,
   imageBase64: string
@@ -103,7 +103,7 @@ async function extractTextFromImage(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         max_tokens: 4096,
         messages: [
           {

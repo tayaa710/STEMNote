@@ -14,13 +14,21 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useHeaderHeight } from '@react-navigation/elements';
 import RNFS from 'react-native-fs';
 import { RootStackParamList } from '../types/navigation';
-import { DrawingData, DrawingTool, Page, SelectionRect } from '../types/models';
+import {
+  DrawingData,
+  DrawingTool,
+  LineSpacing,
+  Page,
+  PaperSettings,
+  SelectionRect,
+} from '../types/models';
 import {
   loadPagesByNote,
   createPage,
   ensurePageExists,
 } from '../storage/pages';
 import { loadDrawingData, saveDrawingData } from '../storage/drawings';
+import { loadPaperSettings, savePaperSettings } from '../storage/paperSettings';
 import DrawingCanvas, { DrawingCanvasHandle } from '../components/DrawingCanvas';
 import DrawingToolbar from '../components/DrawingToolbar';
 import AskSheet from '../components/AskSheet';
@@ -58,6 +66,11 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
   const [testingBackend, setTestingBackend] = useState(false);
   const [indexingNote, setIndexingNote] = useState(false);
   const [indexProgress, setIndexProgress] = useState<{current: number; total: number} | null>(null);
+  const [paperSettings, setPaperSettings] = useState<PaperSettings>({
+    background: 'blank',
+    lineSpacing: 'medium',
+  });
+  const [showLineSpacingOptions, setShowLineSpacingOptions] = useState(false);
 
   // Track last processed pageIndex to avoid setParams loops
   const lastProcessedIndex = useRef<number | null>(null);
@@ -401,6 +414,33 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
     setSelectionRect(null);
   }, [currentPage?.id]);
 
+  // Load paper settings when page changes
+  useEffect(() => {
+    const pageId = currentPage?.id;
+    if (!pageId) {
+      return;
+    }
+
+    let isActive = true;
+    const loadSettings = async () => {
+      try {
+        const settings = await loadPaperSettings(pageId);
+        if (isActive) {
+          setPaperSettings(settings);
+          setShowLineSpacingOptions(settings.background === 'lined');
+        }
+      } catch (error) {
+        console.error('Failed to load paper settings:', error);
+      }
+    };
+
+    loadSettings();
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentPage?.id]);
+
   const handlePreviousPage = () => {
     if (pageIndex > 0) {
       const newIndex = pageIndex - 1;
@@ -471,6 +511,45 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
       setIndexProgress(null);
     }
   }, [canvasSize, pages, folderId, indexingNote, noteId]);
+
+  const handleToggleLinedPaper = useCallback(() => {
+    const pageId = currentPage?.id;
+    setPaperSettings(prev => {
+      const newBackground = prev.background === 'lined' ? 'blank' : 'lined';
+      const newSettings = { ...prev, background: newBackground as 'blank' | 'lined' };
+
+      if (newBackground === 'lined') {
+        setShowLineSpacingOptions(true);
+      } else {
+        setShowLineSpacingOptions(false);
+      }
+
+      // Save settings asynchronously
+      if (pageId) {
+        savePaperSettings(pageId, newSettings).catch(error => {
+          console.error('Failed to save paper settings:', error);
+        });
+      }
+
+      return newSettings;
+    });
+  }, [currentPage?.id]);
+
+  const handleLineSpacingChange = useCallback((spacing: LineSpacing) => {
+    const pageId = currentPage?.id;
+    setPaperSettings(prev => {
+      const newSettings = { ...prev, lineSpacing: spacing };
+
+      // Save settings asynchronously
+      if (pageId) {
+        savePaperSettings(pageId, newSettings).catch(error => {
+          console.error('Failed to save paper settings:', error);
+        });
+      }
+
+      return newSettings;
+    });
+  }, [currentPage?.id]);
 
   // Debug: Test backend connectivity (dev only)
   const handleTestBackend = async () => {
@@ -572,6 +651,95 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
             </TouchableOpacity>
           )}
         </View>
+        {/* Paper Background Controls */}
+        <View style={styles.paperControlsRow}>
+          <TouchableOpacity
+            style={[
+              styles.paperButton,
+              paperSettings.background === 'lined' && styles.paperButtonActive,
+            ]}
+            onPress={handleToggleLinedPaper}
+          >
+            <View style={styles.paperButtonContent}>
+              <View style={styles.linedPaperIcon}>
+                <View style={styles.linedPaperLine} />
+                <View style={styles.linedPaperLine} />
+                <View style={styles.linedPaperLine} />
+              </View>
+              <Text style={[
+                styles.paperButtonText,
+                paperSettings.background === 'lined' && styles.paperButtonTextActive,
+              ]}>
+                Lined
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Line Spacing Options (shown when lined is active) */}
+          {showLineSpacingOptions && paperSettings.background === 'lined' && (
+            <View style={styles.lineSpacingOptions}>
+              <TouchableOpacity
+                style={[
+                  styles.spacingOption,
+                  paperSettings.lineSpacing === 'narrow' && styles.spacingOptionActive,
+                ]}
+                onPress={() => handleLineSpacingChange('narrow')}
+              >
+                <View style={styles.spacingPreview}>
+                  <View style={[styles.previewLine, styles.previewLineNarrow]} />
+                  <View style={[styles.previewLine, styles.previewLineNarrow]} />
+                  <View style={[styles.previewLine, styles.previewLineNarrow]} />
+                  <View style={[styles.previewLine, styles.previewLineNarrow]} />
+                </View>
+                <Text style={[
+                  styles.spacingLabel,
+                  paperSettings.lineSpacing === 'narrow' && styles.spacingLabelActive,
+                ]}>
+                  Narrow
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.spacingOption,
+                  paperSettings.lineSpacing === 'medium' && styles.spacingOptionActive,
+                ]}
+                onPress={() => handleLineSpacingChange('medium')}
+              >
+                <View style={styles.spacingPreview}>
+                  <View style={[styles.previewLine, styles.previewLineMedium]} />
+                  <View style={[styles.previewLine, styles.previewLineMedium]} />
+                  <View style={[styles.previewLine, styles.previewLineMedium]} />
+                </View>
+                <Text style={[
+                  styles.spacingLabel,
+                  paperSettings.lineSpacing === 'medium' && styles.spacingLabelActive,
+                ]}>
+                  Medium
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.spacingOption,
+                  paperSettings.lineSpacing === 'wide' && styles.spacingOptionActive,
+                ]}
+                onPress={() => handleLineSpacingChange('wide')}
+              >
+                <View style={styles.spacingPreview}>
+                  <View style={[styles.previewLine, styles.previewLineWide]} />
+                  <View style={[styles.previewLine, styles.previewLineWide]} />
+                </View>
+                <Text style={[
+                  styles.spacingLabel,
+                  paperSettings.lineSpacing === 'wide' && styles.spacingLabelActive,
+                ]}>
+                  Wide
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </View>
 
       <DrawingToolbar
@@ -600,6 +768,7 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
           isInteractive={!loadingDrawing}
           selectionRect={selectionRect}
           onSelectionChange={handleSelectionChange}
+          paperSettings={paperSettings}
         />
       </View>
 
@@ -645,8 +814,27 @@ const PageEditorScreen = ({ route, navigation }: Props) => {
           setAskSheetVisible(false);
           setAskSheetImageBase64(null);
         }}
+        folderId={folderId}
         pageId={currentPage?.id ?? ''}
         regionImageBase64={askSheetImageBase64}
+        onNavigateToPage={(targetNoteId, targetPageIndex) => {
+          // Close the ask sheet first
+          setAskSheetVisible(false);
+          setAskSheetImageBase64(null);
+
+          if (targetNoteId === noteId) {
+            // Same note - just change page
+            lastProcessedIndex.current = targetPageIndex;
+            navigation.setParams({ pageIndex: targetPageIndex });
+          } else {
+            // Different note - navigate to it
+            navigation.push('PageEditor', {
+              folderId,
+              noteId: targetNoteId,
+              pageIndex: targetPageIndex,
+            });
+          }
+        }}
       />
     </SafeAreaView>
   );
@@ -809,6 +997,95 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 4,
+  },
+  paperControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 12,
+  },
+  paperButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+  },
+  paperButtonActive: {
+    backgroundColor: '#e8f4ff',
+    borderColor: '#007AFF',
+  },
+  paperButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  linedPaperIcon: {
+    width: 20,
+    height: 16,
+    justifyContent: 'space-evenly',
+  },
+  linedPaperLine: {
+    height: 1,
+    backgroundColor: '#888',
+    borderRadius: 1,
+  },
+  paperButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  paperButtonTextActive: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  lineSpacingOptions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  spacingOption: {
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    backgroundColor: '#f8f8f8',
+  },
+  spacingOptionActive: {
+    borderColor: '#007AFF',
+    backgroundColor: '#e8f4ff',
+  },
+  spacingPreview: {
+    width: 32,
+    height: 24,
+    justifyContent: 'flex-start',
+    paddingTop: 2,
+  },
+  previewLine: {
+    height: 1,
+    backgroundColor: '#aaa',
+    borderRadius: 0.5,
+  },
+  previewLineNarrow: {
+    marginBottom: 4,
+  },
+  previewLineMedium: {
+    marginBottom: 6,
+  },
+  previewLineWide: {
+    marginBottom: 10,
+  },
+  spacingLabel: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 4,
+  },
+  spacingLabelActive: {
+    color: '#007AFF',
+    fontWeight: '600',
   },
 });
 

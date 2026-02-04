@@ -281,7 +281,7 @@ Cost considerations:
 - Embeddings: ~$0.0001 per page (negligible)
 - Manual indexing prevents unexpected costs
 
-## Task 14 — Folder RAG (retrieve + answer)
+## Task 14 — Folder RAG (retrieve + answer) ✅ DONE
 Goal:
 - Enhance /askRegion to retrieve relevant context from indexed pages.
 - Return real citations pointing to source pages.
@@ -320,6 +320,25 @@ DoD:
 - Answers reference content from other pages in folder.
 - Citations point to real pages with correct navigation.
 - Works with 0 indexed pages (falls back to image-only).
+
+Implementation:
+- **Hybrid RAG retrieval**: Small folders (≤30 chunks) include ALL chunks; large folders use similarity search
+- **Model**: Switched to gpt-4o-mini for 94% cost savings
+- **match_chunks()**: Database function for vector similarity search
+- **Tappable citations**: Navigate to source page on tap (same note = setParams, different note = push)
+- **Gesture fix**: Disabled swipe-back on PageEditorScreen to prevent interference with drawing
+
+Files created:
+- supabase/migrations/20250204000000_add_match_chunks_function.sql
+
+Files modified:
+- supabase/functions/askRegion/index.ts (RAG retrieval, hybrid approach, gpt-4o-mini)
+- supabase/functions/indexPage/index.ts (switched to gpt-4o-mini)
+- src/ai/apiClient.ts (updated request/response types)
+- src/types/ai.ts (updated Citation type)
+- src/components/AskSheet.tsx (folderId, tappable citations)
+- src/screens/PageEditorScreen.tsx (pass folderId, navigation callback)
+- src/navigation/AppNavigator.tsx (disable swipe-back gesture)
 
 ## Task 15 — PDF ingestion
 Goal:

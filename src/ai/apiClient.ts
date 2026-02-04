@@ -31,16 +31,26 @@ export interface HealthResponse {
   version: string;
 }
 
-// Future endpoint types (stubs for now)
+// Ask region types
 export interface AskRegionRequest {
+  folderId: string; // For RAG context retrieval from indexed pages
   pageId: string;
   regionImageBase64: string;
   question: string;
 }
 
+export interface AskRegionCitation {
+  id: string;
+  title: string;
+  snippet: string;
+  sourceType: 'page' | 'region'; // 'page' = from indexed content, 'region' = current selection
+  noteId?: string; // For navigation to source page
+  pageIndex?: number; // 0-based index for navigation
+}
+
 export interface AskRegionResponse {
   answer: string;
-  citations: Array<{id: string; title: string; snippet: string}>;
+  citations: AskRegionCitation[];
 }
 
 export interface IndexPageRequest {

@@ -37,8 +37,8 @@ AI Providers:
   - Claude Code for building the repo
   - Claude API optionally for reasoning answers
 - OpenAI:
-  - GPT-4o for vision-based question answering (askRegion)
-  - GPT-4o for text extraction from page images (indexPage)
+  - GPT-4o-mini for vision-based question answering (askRegion) - 94% cheaper than GPT-4o
+  - GPT-4o-mini for text extraction from page images (indexPage)
   - text-embedding-3-small for chunk embeddings (RAG)
 
 Database:
@@ -92,13 +92,20 @@ npx react-native run-ios --device
 ## Edge Functions
 
 ### askRegion
-Answers questions about selected page regions using OpenAI GPT-4o vision.
+Answers questions about selected page regions using OpenAI GPT-4o-mini vision with RAG (Retrieval-Augmented Generation).
+
+**Features:**
+- Analyzes the selected region image
+- Retrieves relevant context from indexed pages in the same folder
+- Uses hybrid retrieval: includes ALL chunks for small folders (≤30 chunks), similarity search for larger folders
+- Returns tappable citations linking to source pages
 
 **Endpoint:** `POST /functions/v1/askRegion`
 
 **Request:**
 ```json
 {
+  "folderId": "string",
   "pageId": "string",
   "regionImageBase64": "string",
   "question": "string"
@@ -109,9 +116,22 @@ Answers questions about selected page regions using OpenAI GPT-4o vision.
 ```json
 {
   "answer": "string",
-  "citations": [{ "id": "string", "title": "string", "snippet": "string" }]
+  "citations": [
+    {
+      "id": "string",
+      "title": "Note Name - Page 1",
+      "snippet": "relevant text from chunk...",
+      "sourceType": "page",
+      "noteId": "string",
+      "pageIndex": 0
+    }
+  ]
 }
 ```
+
+**Citation Types:**
+- `sourceType: "region"` - The current selected region (always included)
+- `sourceType: "page"` - Content from indexed pages (tappable for navigation)
 
 ### indexPage
 Index a page for RAG retrieval. Extracts text from page image, chunks it, generates embeddings, and stores in the database.
@@ -200,7 +220,11 @@ Indexing extracts text from your handwritten notes and stores it for RAG (Retrie
 ### Cost Considerations
 
 Each page indexing call uses:
-- **GPT-4o Vision**: ~$0.01-0.05 per page (for text extraction)
+- **GPT-4o-mini Vision**: ~$0.001-0.005 per page (for text extraction) - 94% cheaper than GPT-4o
 - **Embeddings**: ~$0.0001 per page (negligible)
 
-For a 10-page note, expect ~$0.10-0.50 per full index.
+For a 10-page note, expect ~$0.01-0.05 per full index.
+
+Each question (askRegion) costs:
+- **GPT-4o-mini**: ~$0.001-0.003 per question
+- **Embeddings**: ~$0.00002 per question (only for large folders with >30 chunks)
